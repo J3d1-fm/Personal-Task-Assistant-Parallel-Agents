@@ -75,13 +75,13 @@ The intended production shape is Cloud Run + Firestore.
 Production URL:
 
 ```text
-https://personal-task-tracker-535176013900.europe-west1.run.app
+https://personal-task-tracker-avip7vhgqq-ew.a.run.app
 ```
 
 Google OAuth redirect URI for production:
 
 ```text
-https://personal-task-tracker-535176013900.europe-west1.run.app/auth/google/callback
+https://personal-task-tracker-avip7vhgqq-ew.a.run.app/auth/google/callback
 ```
 
 Use `deploy/gcloud.example.sh` as a deployment checklist after creating a GCP project,
