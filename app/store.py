@@ -167,9 +167,12 @@ class FirestoreTaskStore:
         if "status" in updates and updates["status"] != TaskStatus.done:
             updates["completed_at"] = None
         updates["updated_at"] = utc_now()
-        data.update(encode_task_data(updates))
-        ref.set(data, merge=False)
-        return TaskRead.model_validate(data)
+        encoded_updates = encode_task_data(updates)
+        ref.update(encoded_updates)
+        refreshed = ref.get()
+        if not refreshed.exists:
+            return None
+        return self._doc_to_task(refreshed)
 
     def delete_task(self, task_id: int) -> bool:
         ref = self.collection.document(str(task_id))
@@ -214,4 +217,3 @@ def get_task_store(db: Session | None = None) -> TaskStore:
     if db is None:
         raise RuntimeError("SQL-backed task store requires a database session")
     return SqliteTaskStore(db)
-

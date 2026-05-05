@@ -17,6 +17,7 @@ from app.store import get_task_store
 
 
 settings = get_settings()
+settings.validate_runtime_config()
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
     SessionMiddleware,
