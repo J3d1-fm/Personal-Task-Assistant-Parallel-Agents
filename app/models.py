@@ -14,6 +14,7 @@ def utc_now() -> datetime:
 class TaskStatus(StrEnum):
     backlog = "backlog"
     in_progress = "in_progress"
+    waiting_review = "waiting_review"
     blocked = "blocked"
     done = "done"
     cancelled = "cancelled"
@@ -61,4 +62,3 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
-

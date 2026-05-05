@@ -7,6 +7,10 @@
   --muted: #657084;
   --accent: #216e63;
   --danger: #a23a3a;
+  --normal: #2f7d50;
+  --important: #2f64b7;
+  --urgent: #b98510;
+  --overdue: #c74444;
 }
 
 * {
@@ -40,6 +44,13 @@ button {
 button.secondary {
   background: white;
   color: var(--accent);
+}
+
+button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 45%);
 }
 
 .topbar {
@@ -155,7 +166,7 @@ textarea {
 
 .board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(210px, 1fr));
+  grid-template-columns: repeat(5, minmax(210px, 1fr));
   gap: 14px;
   min-width: 0;
 }
@@ -163,11 +174,13 @@ textarea {
 .column {
   padding: 12px;
   min-height: 72vh;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .tasks {
   display: grid;
   gap: 10px;
+  min-height: 58px;
 }
 
 .task {
@@ -177,6 +190,45 @@ textarea {
   background: #fbfcfd;
   display: grid;
   gap: 10px;
+  border-left-width: 5px;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.task:active {
+  cursor: grabbing;
+}
+
+.task.priority-normal {
+  border-left-color: var(--normal);
+  background: #f7fcf8;
+}
+
+.task.priority-important {
+  border-left-color: var(--important);
+  background: #f7faff;
+}
+
+.task.priority-urgent {
+  border-left-color: var(--urgent);
+  background: #fffaf0;
+}
+
+.task.is-overdue {
+  border-top-color: var(--overdue);
+  border-right-color: var(--overdue);
+  border-bottom-color: var(--overdue);
+  box-shadow: inset 4px 0 0 var(--overdue);
+}
+
+.task.is-dragging {
+  opacity: 0.55;
+}
+
+.column.is-drop-target {
+  background: #eef7f5;
+  border-color: var(--accent);
 }
 
 .task h3 {
@@ -204,10 +256,18 @@ textarea {
   font-size: 12px;
 }
 
+.date-pill {
+  color: var(--text);
+}
+
 .actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.actions [data-action="done"] {
+  grid-column: 1 / -1;
 }
 
 .actions button {

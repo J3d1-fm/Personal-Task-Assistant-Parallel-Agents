@@ -24,7 +24,7 @@
 Task fields intentionally stay small:
 
 - `title`, `description`
-- `status`: `backlog`, `in_progress`, `blocked`, `done`, `cancelled`
+- `status`: `backlog`, `in_progress`, `waiting_review`, `blocked`, `done`, `cancelled`
 - `assignee`: `me`, `codex`, `unassigned`
 - `origin`: `manual`, `slack`, `telegram`, `email`, `codex`, `other`
 - `priority`, `due_at`, `reminder_at`

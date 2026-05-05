@@ -36,6 +36,7 @@
               <select name="status">
                 <option value="backlog">Backlog</option>
                 <option value="in_progress">In progress</option>
+                <option value="waiting_review">Waiting review</option>
                 <option value="blocked">Blocked</option>
               </select>
             </label>
@@ -62,6 +63,10 @@
         <div class="column" data-status="in_progress">
           <h2>In progress</h2>
           <div class="tasks" id="in_progress"></div>
+        </div>
+        <div class="column" data-status="waiting_review">
+          <h2>Waiting review</h2>
+          <div class="tasks" id="waiting_review"></div>
         </div>
         <div class="column" data-status="blocked">
           <h2>Blocked</h2>

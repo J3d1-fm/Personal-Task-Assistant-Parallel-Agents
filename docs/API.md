@@ -54,6 +54,8 @@ curl -X PATCH "$TASK_TRACKER_URL/api/tasks/1" \
   -d '{"assignee": "codex", "status": "in_progress"}'
 ```
 
+Task status values are `backlog`, `in_progress`, `waiting_review`, `blocked`, `done`, and `cancelled`.
+
 ## Delete a Task
 
 ```bash
