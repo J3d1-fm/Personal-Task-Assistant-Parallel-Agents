@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Personal Task Tracker"
     public_base_url: str = ""
+    task_store: str = "sqlite"
     database_url: str = "sqlite:///./task_tracker.db"
     task_tracker_api_key: str = "change-me"
     session_secret_key: str = "change-this-long-random-string"
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     @property
     def normalized_public_base_url(self) -> str:
         return self.public_base_url.rstrip("/")
+
+    @property
+    def use_firestore(self) -> bool:
+        return self.task_store.lower() == "firestore"
 
     @property
     def allowed_email_set(self) -> set[str]:

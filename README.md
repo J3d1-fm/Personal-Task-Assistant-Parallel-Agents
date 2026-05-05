@@ -6,7 +6,7 @@ It provides:
 
 - A web UI for reviewing, assigning, and completing tasks.
 - A JSON API for Codex and integrations to create and update tasks.
-- Database-backed storage, with SQLite for local development and PostgreSQL for Google Cloud.
+- Database-backed storage, with SQLite for local development and Firestore for Google Cloud.
 - Reminder fields so missed tasks can be queried and notified.
 
 ## Local Development
@@ -61,6 +61,7 @@ Authorization: Bearer <key>
 
 Main endpoints:
 
+- `GET /readyz`
 - `GET /api/tasks`
 - `POST /api/tasks`
 - `PATCH /api/tasks/{task_id}`
@@ -69,15 +70,27 @@ Main endpoints:
 
 ## Google Cloud
 
-The intended production shape is Cloud Run + Cloud SQL for PostgreSQL.
+The intended production shape is Cloud Run + Firestore.
+
+Production URL:
+
+```text
+https://personal-task-tracker-535176013900.europe-west1.run.app
+```
+
+Google OAuth redirect URI for production:
+
+```text
+https://personal-task-tracker-535176013900.europe-west1.run.app/auth/google/callback
+```
 
 Use `deploy/gcloud.example.sh` as a deployment checklist after creating a GCP project,
-Artifact Registry repository, Cloud SQL Postgres instance, and a Secret Manager secret
-for the API key.
+Artifact Registry repository, Firestore database, and Secret Manager secrets.
 
 For Cloud Run set:
 
 ```bash
 PUBLIC_BASE_URL=https://<cloud-run-url>
 SESSION_COOKIE_HTTPS=true
+TASK_STORE=firestore
 ```

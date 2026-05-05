@@ -1,19 +1,19 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import current_user, is_allowed_email, require_api_key_or_user
 from app.config import get_settings
 from app.db import Base, engine, get_db
-from app.models import Task, TaskStatus, utc_now
+from app.models import TaskStatus
 from app.schemas import ContextIngest, ContextIngestResult, TaskCreate, TaskRead, TaskUpdate
+from app.store import get_task_store
 
 
 settings = get_settings()
@@ -41,11 +41,17 @@ if settings.google_oauth_enabled:
 
 @app.on_event("startup")
 def startup() -> None:
-    Base.metadata.create_all(bind=engine)
+    if not settings.use_firestore:
+        Base.metadata.create_all(bind=engine)
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz() -> dict[str, str]:
     return {"status": "ok"}
 
 
@@ -57,6 +63,7 @@ def index(request: Request) -> Response:
             {
                 "request": request,
                 "app_name": settings.app_name,
+                "redirect_uri": oauth_redirect_uri(request),
             },
             status_code=503,
         )
@@ -81,14 +88,11 @@ async def login(request: Request) -> Response:
             {
                 "request": request,
                 "app_name": settings.app_name,
+                "redirect_uri": oauth_redirect_uri(request),
             },
             status_code=503,
         )
-    if settings.normalized_public_base_url:
-        redirect_uri = f"{settings.normalized_public_base_url}/auth/google/callback"
-    else:
-        redirect_uri = str(request.url_for("google_auth_callback"))
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(request, oauth_redirect_uri(request))
 
 
 @app.get("/auth/google/callback")
@@ -120,6 +124,12 @@ def logout(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/login", status_code=303)
 
 
+def oauth_redirect_uri(request: Request) -> str:
+    if settings.normalized_public_base_url:
+        return f"{settings.normalized_public_base_url}/auth/google/callback"
+    return str(request.url_for("google_auth_callback"))
+
+
 @app.get("/api/me", dependencies=[Depends(require_api_key_or_user)])
 def me(request: Request) -> dict[str, str] | None:
     return current_user(request)
@@ -131,95 +141,45 @@ def list_tasks(
     status: TaskStatus | None = None,
     assignee: str | None = None,
     include_done: bool = Query(default=False),
-) -> list[Task]:
-    statement = select(Task).order_by(Task.priority.asc(), Task.due_at.asc().nullslast(), Task.created_at.desc())
-    if status is not None:
-        statement = statement.where(Task.status == status)
-    elif not include_done:
-        statement = statement.where(Task.status.not_in([TaskStatus.done, TaskStatus.cancelled]))
-    if assignee:
-        statement = statement.where(Task.assignee == assignee)
-    return list(db.scalars(statement).all())
+) -> list[TaskRead]:
+    return get_task_store(db).list_tasks(status=status, assignee=assignee, include_done=include_done)
 
 
 @app.post("/api/tasks", response_model=TaskRead, dependencies=[Depends(require_api_key_or_user)])
-def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
-    task = Task(**payload.model_dump())
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task
+def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> TaskRead:
+    return get_task_store(db).create_task(payload)
 
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskRead, dependencies=[Depends(require_api_key_or_user)])
-def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)) -> Task:
-    task = db.get(Task, task_id)
+def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)) -> TaskRead:
+    task = get_task_store(db).update_task(task_id, payload)
     if task is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Task not found")
-
-    updates = payload.model_dump(exclude_unset=True)
-    if updates.get("status") == TaskStatus.done and task.completed_at is None:
-        task.completed_at = utc_now()
-    if "status" in updates and updates["status"] != TaskStatus.done:
-        task.completed_at = None
-    for key, value in updates.items():
-        setattr(task, key, value)
-    db.commit()
-    db.refresh(task)
     return task
 
 
 @app.delete("/api/tasks/{task_id}", dependencies=[Depends(require_api_key_or_user)])
 def delete_task(task_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
-    task = db.get(Task, task_id)
-    if task is None:
-        from fastapi import HTTPException
-
+    deleted = get_task_store(db).delete_task(task_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
-    db.delete(task)
-    db.commit()
     return {"deleted": True}
 
 
 @app.post("/api/ingest/context", response_model=ContextIngestResult, dependencies=[Depends(require_api_key_or_user)])
 def ingest_context(payload: ContextIngest, db: Session = Depends(get_db)) -> ContextIngestResult:
     created: list[Task] = []
+    store = get_task_store(db)
     for item in payload.tasks:
         data = item.model_dump()
         data["origin"] = payload.origin
         data["source_name"] = data.get("source_name") or payload.source_name
         data["source_url"] = data.get("source_url") or payload.source_url
         data["source_context"] = data.get("source_context") or payload.source_context
-        task = Task(**data)
-        db.add(task)
-        created.append(task)
-    db.commit()
-    for task in created:
-        db.refresh(task)
+        created.append(store.create_task(TaskCreate(**data)))
     return ContextIngestResult(created=created)
 
 
 @app.get("/api/reminders/due", response_model=list[TaskRead], dependencies=[Depends(require_api_key_or_user)])
-def due_reminders(db: Session = Depends(get_db), now: datetime | None = None) -> list[Task]:
-    current = now or datetime.now(timezone.utc)
-    statement = (
-        select(Task)
-        .where(Task.status.not_in([TaskStatus.done, TaskStatus.cancelled]))
-        .where(
-            or_(
-                (Task.reminder_at.is_not(None)) & (Task.reminder_at <= current),
-                (Task.due_at.is_not(None)) & (Task.due_at <= current),
-            )
-        )
-        .where(
-            or_(
-                Task.reminder_last_sent_at.is_(None),
-                (Task.reminder_at.is_not(None)) & (Task.reminder_last_sent_at < Task.reminder_at),
-                (Task.due_at.is_not(None)) & (Task.reminder_last_sent_at < Task.due_at),
-            )
-        )
-        .order_by(Task.reminder_at.asc(), Task.priority.asc())
-    )
-    return list(db.scalars(statement).all())
+def due_reminders(db: Session = Depends(get_db), now: datetime | None = None) -> list[TaskRead]:
+    return get_task_store(db).due_reminders(now=now)
