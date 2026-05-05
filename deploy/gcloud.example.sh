@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Fill these in before running.
+PROJECT_ID="your-gcp-project"
+REGION="europe-west1"
+SERVICE="personal-task-tracker"
+REPOSITORY="personal-apps"
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:latest"
+CLOUD_SQL_INSTANCE="${PROJECT_ID}:${REGION}:personal-task-tracker-db"
+DATABASE_URL_SECRET="task-tracker-database-url"
+API_KEY_SECRET="task-tracker-api-key"
+SESSION_SECRET_SECRET="task-tracker-session-secret"
+GOOGLE_CLIENT_ID_SECRET="task-tracker-google-client-id"
+GOOGLE_CLIENT_SECRET_SECRET="task-tracker-google-client-secret"
+ALLOWED_GOOGLE_EMAILS="you@example.com"
+
+gcloud config set project "${PROJECT_ID}"
+
+gcloud services enable \
+  run.googleapis.com \
+  sqladmin.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com \
+  cloudbuild.googleapis.com
+
+gcloud artifacts repositories create "${REPOSITORY}" \
+  --repository-format=docker \
+  --location="${REGION}" \
+  --description="Personal app containers" || true
+
+gcloud builds submit --tag "${IMAGE}"
+
+gcloud run deploy "${SERVICE}" \
+  --image="${IMAGE}" \
+  --region="${REGION}" \
+  --allow-unauthenticated \
+  --add-cloudsql-instances="${CLOUD_SQL_INSTANCE}" \
+  --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,TASK_TRACKER_API_KEY=${API_KEY_SECRET}:latest,SESSION_SECRET_KEY=${SESSION_SECRET_SECRET}:latest,GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_CLIENT_ID_SECRET}:latest,GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET_SECRET}:latest" \
+  --set-env-vars="APP_NAME=Personal Task Tracker,ALLOWED_GOOGLE_EMAILS=${ALLOWED_GOOGLE_EMAILS}"

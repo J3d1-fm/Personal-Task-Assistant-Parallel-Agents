@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>{{ app_name }}</h1>
+        <p>Personal work queue for you and Codex.</p>
+      </div>
+      <form class="account" method="post" action="/logout">
+        <span>{{ user.email }}</span>
+        <button type="submit" class="secondary">Logout</button>
+      </form>
+    </header>
+
+    <main class="layout">
+      <section class="panel composer">
+        <h2>New task</h2>
+        <form id="taskForm">
+          <label>Title <input name="title" required maxlength="240"></label>
+          <label>Description <textarea name="description" rows="4"></textarea></label>
+          <div class="grid">
+            <label>Assignee
+              <select name="assignee">
+                <option value="unassigned">Unassigned</option>
+                <option value="me">Me</option>
+                <option value="codex">Codex</option>
+              </select>
+            </label>
+            <label>Status
+              <select name="status">
+                <option value="backlog">Backlog</option>
+                <option value="in_progress">In progress</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </label>
+            <label>Priority
+              <select name="priority">
+                <option value="1">P1</option>
+                <option value="2">P2</option>
+                <option value="3" selected>P3</option>
+                <option value="4">P4</option>
+                <option value="5">P5</option>
+              </select>
+            </label>
+            <label>Reminder <input name="reminder_at" type="datetime-local"></label>
+          </div>
+          <button type="submit">Create task</button>
+        </form>
+      </section>
+
+      <section class="board" aria-live="polite">
+        <div class="column" data-status="backlog">
+          <h2>Backlog</h2>
+          <div class="tasks" id="backlog"></div>
+        </div>
+        <div class="column" data-status="in_progress">
+          <h2>In progress</h2>
+          <div class="tasks" id="in_progress"></div>
+        </div>
+        <div class="column" data-status="blocked">
+          <h2>Blocked</h2>
+          <div class="tasks" id="blocked"></div>
+        </div>
+        <div class="column" data-status="done">
+          <h2>Done</h2>
+          <div class="tasks" id="done"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
