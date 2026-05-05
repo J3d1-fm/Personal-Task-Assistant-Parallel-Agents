@@ -14,6 +14,7 @@ SESSION_SECRET_SECRET="task-tracker-session-secret"
 GOOGLE_CLIENT_ID_SECRET="task-tracker-google-client-id"
 GOOGLE_CLIENT_SECRET_SECRET="task-tracker-google-client-secret"
 ALLOWED_GOOGLE_EMAILS="you@example.com"
+PUBLIC_BASE_URL="https://your-cloud-run-url"
 
 gcloud config set project "${PROJECT_ID}"
 
@@ -37,4 +38,4 @@ gcloud run deploy "${SERVICE}" \
   --allow-unauthenticated \
   --add-cloudsql-instances="${CLOUD_SQL_INSTANCE}" \
   --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,TASK_TRACKER_API_KEY=${API_KEY_SECRET}:latest,SESSION_SECRET_KEY=${SESSION_SECRET_SECRET}:latest,GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_CLIENT_ID_SECRET}:latest,GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET_SECRET}:latest" \
-  --set-env-vars="APP_NAME=Personal Task Tracker,ALLOWED_GOOGLE_EMAILS=${ALLOWED_GOOGLE_EMAILS}"
+  --set-env-vars="APP_NAME=Personal Task Tracker,ALLOWED_GOOGLE_EMAILS=${ALLOWED_GOOGLE_EMAILS},PUBLIC_BASE_URL=${PUBLIC_BASE_URL},SESSION_COOKIE_HTTPS=true"

@@ -44,6 +44,8 @@ GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
 ALLOWED_GOOGLE_EMAILS=your-email@gmail.com
 SESSION_SECRET_KEY=long-random-secret
+PUBLIC_BASE_URL=http://127.0.0.1:8000
+SESSION_COOKIE_HTTPS=false
 ```
 
 The JSON API still supports `Authorization: Bearer <TASK_TRACKER_API_KEY>` for Codex,
@@ -72,3 +74,10 @@ The intended production shape is Cloud Run + Cloud SQL for PostgreSQL.
 Use `deploy/gcloud.example.sh` as a deployment checklist after creating a GCP project,
 Artifact Registry repository, Cloud SQL Postgres instance, and a Secret Manager secret
 for the API key.
+
+For Cloud Run set:
+
+```bash
+PUBLIC_BASE_URL=https://<cloud-run-url>
+SESSION_COOKIE_HTTPS=true
+```

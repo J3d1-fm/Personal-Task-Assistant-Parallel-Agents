@@ -22,7 +22,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
     same_site="lax",
-    https_only=False,
+    https_only=settings.session_cookie_https,
+    max_age=60 * 60 * 24 * 30,
 )
 templates = Jinja2Templates(directory="app/templates")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -83,7 +84,10 @@ async def login(request: Request) -> Response:
             },
             status_code=503,
         )
-    redirect_uri = request.url_for("google_auth_callback")
+    if settings.normalized_public_base_url:
+        redirect_uri = f"{settings.normalized_public_base_url}/auth/google/callback"
+    else:
+        redirect_uri = str(request.url_for("google_auth_callback"))
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 

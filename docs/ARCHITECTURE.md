@@ -4,6 +4,8 @@
 
 - FastAPI serves both the web UI and JSON API.
 - Google OAuth protects the browser UI with a signed session cookie and an email allowlist.
+- `PUBLIC_BASE_URL` controls the OAuth callback URL in hosted environments.
+- `SESSION_COOKIE_HTTPS=true` should be used behind HTTPS in Cloud Run.
 - SQLAlchemy stores tasks in SQLite locally and PostgreSQL in production.
 - Codex extracts tasks from Slack, Telegram, Gmail, or other context and writes them through the API.
 - Reminder polling calls `/api/reminders/due`, sends notifications, then marks each reminder as sent.
