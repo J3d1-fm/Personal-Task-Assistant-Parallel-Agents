@@ -1,5 +1,11 @@
 Personal Task Tracker Changelog
 
+Version 0.2.1 - 2026-05-13
+
+- Added a compact color legend for overdue, urgent/due-soon, important, normal, and selected states.
+- Added hover and keyboard-focus tooltips for command-center metrics, quick filters, legend items, priority pills, owner pills, source pills, date pills, and task action buttons.
+- Bumped the static asset version from 0.2.0 to 0.2.1 so browsers refresh the updated UI.
+
 Version 0.2.0 - 2026-05-13
 
 - Redesigned the main task screen as an operational command center.

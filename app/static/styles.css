@@ -16,6 +16,7 @@
   --urgent: #b98510;
   --warning-soft: #fff6dc;
   --shadow: 0 12px 36px rgb(23 32 51 / 8%);
+  --tooltip-bg: #172033;
 }
 
 * {
@@ -54,7 +55,9 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-a:focus-visible {
+a:focus-visible,
+.metric:focus-visible,
+.legend-list li:focus-visible {
   outline: 3px solid rgb(33 110 99 / 28%);
   outline-offset: 2px;
 }
@@ -153,6 +156,7 @@ p {
 }
 
 .metric {
+  position: relative;
   display: grid;
   gap: 2px;
   min-height: 58px;
@@ -183,6 +187,7 @@ p {
 }
 
 .filter-chip {
+  position: relative;
   min-height: 34px;
   border-color: var(--line);
   background: white;
@@ -207,6 +212,83 @@ p {
   grid-template-columns: 310px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.legend-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.legend-head {
+  display: grid;
+  gap: 2px;
+  min-width: 170px;
+}
+
+.legend-head p {
+  font-size: 12px;
+}
+
+.legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.legend-list li {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend-list strong {
+  color: var(--text);
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(23 32 51 / 18%);
+  border-radius: 3px;
+}
+
+.swatch-overdue {
+  background: var(--danger);
+}
+
+.swatch-urgent {
+  background: var(--urgent);
+}
+
+.swatch-important {
+  background: var(--important);
+}
+
+.swatch-normal {
+  background: var(--normal);
+}
+
+.swatch-selected {
+  background: var(--accent);
 }
 
 .setup {
@@ -331,6 +413,7 @@ textarea {
 }
 
 .task {
+  position: relative;
   border: 1px solid var(--line);
   border-top: 3px solid var(--normal);
   border-radius: 8px;
@@ -425,6 +508,7 @@ textarea {
 
 .pill,
 .source-link {
+  position: relative;
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 999px;
@@ -456,6 +540,57 @@ textarea {
 .source-link:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::before,
+[data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  z-index: 90;
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+[data-tooltip]::before {
+  content: "";
+  bottom: calc(100% + 5px);
+  border: 6px solid transparent;
+  border-top-color: var(--tooltip-bg);
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  bottom: calc(100% + 16px);
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--tooltip-bg);
+  box-shadow: 0 10px 24px rgb(23 32 51 / 18%);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+}
+
+[data-tooltip]:hover::before,
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::before,
+[data-tooltip]:focus-visible::after,
+[data-tooltip]:focus-within::before,
+[data-tooltip]:focus-within::after {
+  display: block;
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .actions {
@@ -502,6 +637,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .legend-panel {
+    grid-template-columns: 1fr;
+  }
+
   .composer {
     position: static;
   }
@@ -538,6 +677,15 @@ textarea {
 
   .filter-chip {
     min-width: 0;
+  }
+
+  .legend-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .legend-list li {
+    border-radius: 8px;
   }
 
   .board,

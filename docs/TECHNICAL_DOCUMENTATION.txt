@@ -1,18 +1,18 @@
 Personal Task Tracker Technical Documentation
 
-Version: 0.2.0
+Version: 0.2.1
 Last updated: 2026-05-13
 
 Overview
 
 Personal Task Tracker is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, context ingestion, and reminders.
 
-Version 0.2.0 keeps the backend data model unchanged and focuses on the task board user experience. The design approach is an operational command center: the first screen answers what is active, what is overdue, who owns the next action, and what needs review.
+Version 0.2.1 keeps the backend data model unchanged and adds explanatory UI affordances on top of the 0.2.0 command-center design. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
 
 Changed Files
 
 - app/config.py
-  Adds Settings.app_version with value 0.2.0.
+  Sets Settings.app_version to 0.2.1.
 
 - app/main.py
   Passes app_version into the index.html template.
@@ -21,13 +21,17 @@ Changed Files
   Replaces the old sidebar-plus-board layout with a command-center layout:
   top metrics, quick filters, search, capture form, and kanban board.
   Static CSS and JS links now include ?v={{ app_version }} for cache busting.
+  Adds a color legend below the command center.
+  Adds tooltip text to metrics, filter controls, and legend items.
 
 - app/static/app.js
   Adds client-side task state, metrics, persistent filters, search, priority sorting, due-soon and overdue detection, richer card rendering, and column counts.
   Existing API calls remain unchanged except that manual task creation can now send due_at.
+  Adds generated tooltip text for task status, priority, owner, source, dates, and action buttons.
 
 - app/static/styles.css
   Reworks layout, typography, command-center controls, task cards, responsive behavior, and focus states.
+  Adds compact legend styling and reusable tooltip styling for hover and keyboard focus.
 
 Runtime Behavior
 
@@ -53,11 +57,11 @@ The browser UI computes these display-only concepts locally:
 - Needs review: tasks with waiting_review status.
 - Unassigned: active tasks with unassigned assignee.
 
-No database migration is required for version 0.2.0 because due_at already exists in the Task schema and storage model.
+No database migration is required for version 0.2.1 because the changes are limited to rendered HTML, static JavaScript, static CSS, and the app version value.
 
 Rollback Notes
 
-To roll back the UI portion of version 0.2.0, revert these files to the previous version:
+To roll back the UI portion of version 0.2.1, revert these files to the previous version:
 
 - app/config.py
 - app/main.py
@@ -74,3 +78,4 @@ Verification Performed
 - Headless Chromium visual check at 1440x1000 and 390x900.
 - Checked body and board horizontal overflow: 0px on both viewports.
 - Checked clipped button text: none on both viewports.
+- Checked tooltip activation on hover: tooltip pseudo-element displays with opacity 1.

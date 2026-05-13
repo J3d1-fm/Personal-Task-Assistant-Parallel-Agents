@@ -148,10 +148,35 @@ function priorityLabel(task) {
   return "P3 normal";
 }
 
+function priorityTooltip(task) {
+  if (isOverdue(task)) return "Overdue: the due date or reminder time has already passed.";
+  if (isDueSoon(task)) return "Due soon: the due date or reminder is within the next 24 hours.";
+  if (task.priority === 1) return "P1 urgent: handle now or today.";
+  if (task.priority === 2) return "P2 important: should be handled soon.";
+  if (task.priority === 4) return "P4 low: useful, but not time-sensitive.";
+  if (task.priority === 5) return "P5 someday: optional or later.";
+  return "P3 normal: default task priority.";
+}
+
 function assigneeLabel(value) {
   if (value === "me") return "Me";
   if (value === "codex") return "Codex";
   return "Unassigned";
+}
+
+function assigneeTooltip(value) {
+  if (value === "me") return "You own the next action.";
+  if (value === "codex") return "Codex owns the next action.";
+  return "No owner yet. Triage this before work starts.";
+}
+
+function statusTooltip(value) {
+  if (value === "backlog") return "New, unstarted, or waiting for triage.";
+  if (value === "in_progress") return "Work that is actively moving.";
+  if (value === "waiting_review") return "Output is ready and needs review before closing.";
+  if (value === "blocked") return "Cannot move forward without an answer, access, decision, or file.";
+  if (value === "done") return "Completed and accepted.";
+  return "Task status.";
 }
 
 function formatDateTime(value) {
@@ -169,6 +194,10 @@ function titleCaseStatus(value) {
 
 function buttonClass(isActive) {
   return isActive ? "is-active" : "secondary";
+}
+
+function tooltipAttr(value) {
+  return `data-tooltip="${escapeHtml(value)}" title="${escapeHtml(value)}"`;
 }
 
 function clearDropTargets() {
@@ -244,10 +273,10 @@ function setupTaskDrag(node, task) {
 function datePills(task) {
   const pills = [];
   if (task.due_at) {
-    pills.push(`<span class="pill date-pill" title="${escapeHtml(new Date(task.due_at).toLocaleString())}">Due ${escapeHtml(formatDateTime(task.due_at))}</span>`);
+    pills.push(`<span class="pill date-pill" ${tooltipAttr(`Due date: ${new Date(task.due_at).toLocaleString()}`)}>Due ${escapeHtml(formatDateTime(task.due_at))}</span>`);
   }
   if (task.reminder_at) {
-    pills.push(`<span class="pill date-pill" title="${escapeHtml(new Date(task.reminder_at).toLocaleString())}">Remind ${escapeHtml(formatDateTime(task.reminder_at))}</span>`);
+    pills.push(`<span class="pill date-pill" ${tooltipAttr(`Reminder time: ${new Date(task.reminder_at).toLocaleString()}`)}>Remind ${escapeHtml(formatDateTime(task.reminder_at))}</span>`);
   }
   return pills.join("");
 }
@@ -255,9 +284,9 @@ function datePills(task) {
 function sourceMarkup(task) {
   const name = task.source_name ? escapeHtml(task.source_name) : "";
   if (task.source_url) {
-    return `<a class="source-link" href="${escapeHtml(task.source_url)}" target="_blank" rel="noreferrer">${name || "Source"}</a>`;
+    return `<a class="source-link" href="${escapeHtml(task.source_url)}" target="_blank" rel="noreferrer" ${tooltipAttr("Open the original source for this task.")}>${name || "Source"}</a>`;
   }
-  return name ? `<span class="pill">${name}</span>` : "";
+  return name ? `<span class="pill" ${tooltipAttr("Where this task came from.")}>${name}</span>` : "";
 }
 
 function taskNode(task) {
@@ -268,24 +297,24 @@ function taskNode(task) {
   node.innerHTML = `
     <div class="task-topline">
       <span class="status-dot" aria-hidden="true"></span>
-      <span class="status-name">${escapeHtml(titleCaseStatus(task.status))}</span>
+      <span class="status-name" ${tooltipAttr(statusTooltip(task.status))}>${escapeHtml(titleCaseStatus(task.status))}</span>
       <span class="task-id">#${task.id}</span>
     </div>
     <h3>${escapeHtml(task.title)}</h3>
     ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
     <div class="meta">
-      <span class="pill priority-pill">${escapeHtml(priorityLabel(task))}</span>
-      <span class="pill assignee-${escapeHtml(task.assignee)}">${escapeHtml(assigneeLabel(task.assignee))}</span>
-      <span class="pill">${escapeHtml(task.origin)}</span>
+      <span class="pill priority-pill" ${tooltipAttr(priorityTooltip(task))}>${escapeHtml(priorityLabel(task))}</span>
+      <span class="pill assignee-${escapeHtml(task.assignee)}" ${tooltipAttr(assigneeTooltip(task.assignee))}>${escapeHtml(assigneeLabel(task.assignee))}</span>
+      <span class="pill" ${tooltipAttr("Source channel that created the task.")}>${escapeHtml(task.origin)}</span>
       ${sourceMarkup(task)}
       ${datePills(task)}
     </div>
     <div class="actions">
-      <button class="${buttonClass(task.assignee === "me")}" data-action="me" aria-label="Assign to me" aria-pressed="${task.assignee === "me"}">Me</button>
-      <button class="${buttonClass(task.assignee === "codex")}" data-action="codex" aria-label="Assign to Codex" aria-pressed="${task.assignee === "codex"}">Codex</button>
-      <button class="${buttonClass(task.status === "in_progress")}" data-action="start" aria-pressed="${task.status === "in_progress"}">Start</button>
-      <button class="${buttonClass(task.status === "waiting_review")}" data-action="review" aria-pressed="${task.status === "waiting_review"}">Review</button>
-      <button class="${buttonClass(task.status === "done")}" data-action="done" aria-pressed="${task.status === "done"}">Done</button>
+      <button class="${buttonClass(task.assignee === "me")}" data-action="me" aria-label="Assign to me" aria-pressed="${task.assignee === "me"}" ${tooltipAttr("Make yourself the next-action owner.")}>Me</button>
+      <button class="${buttonClass(task.assignee === "codex")}" data-action="codex" aria-label="Assign to Codex" aria-pressed="${task.assignee === "codex"}" ${tooltipAttr("Delegate the next action to Codex.")}>Codex</button>
+      <button class="${buttonClass(task.status === "in_progress")}" data-action="start" aria-pressed="${task.status === "in_progress"}" ${tooltipAttr("Move this task to In progress.")}>Start</button>
+      <button class="${buttonClass(task.status === "waiting_review")}" data-action="review" aria-pressed="${task.status === "waiting_review"}" ${tooltipAttr("Move this task to Review.")}>Review</button>
+      <button class="${buttonClass(task.status === "done")}" data-action="done" aria-pressed="${task.status === "done"}" ${tooltipAttr("Close this task as accepted.")}>Done</button>
     </div>
   `;
   setupTaskDrag(node, task);

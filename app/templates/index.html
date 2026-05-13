@@ -22,41 +22,75 @@
     <main class="shell">
       <section class="command-center" aria-live="polite">
         <div class="metrics" id="metrics">
-          <div class="metric">
+          <div class="metric" tabindex="0" data-tooltip="All tasks that are not Done. This is the live workload.">
             <span class="metric-label">Active</span>
             <strong data-metric="active">0</strong>
           </div>
-          <div class="metric is-hot">
+          <div class="metric is-hot" tabindex="0" data-tooltip="Active tasks with a due date or reminder in the past.">
             <span class="metric-label">Overdue</span>
             <strong data-metric="overdue">0</strong>
           </div>
-          <div class="metric">
+          <div class="metric" tabindex="0" data-tooltip="Active tasks where you own the next action.">
             <span class="metric-label">Mine</span>
             <strong data-metric="mine">0</strong>
           </div>
-          <div class="metric">
+          <div class="metric" tabindex="0" data-tooltip="Active tasks delegated to Codex.">
             <span class="metric-label">Codex</span>
             <strong data-metric="codex">0</strong>
           </div>
-          <div class="metric">
+          <div class="metric" tabindex="0" data-tooltip="Tasks waiting for you to inspect and accept the result.">
             <span class="metric-label">Review</span>
             <strong data-metric="review">0</strong>
           </div>
         </div>
 
         <div class="filters" role="group" aria-label="Task filters">
-          <button type="button" class="filter-chip is-active" data-filter="all">All</button>
-          <button type="button" class="filter-chip" data-filter="mine">My next actions</button>
-          <button type="button" class="filter-chip" data-filter="codex">Codex work</button>
-          <button type="button" class="filter-chip" data-filter="review">Needs review</button>
-          <button type="button" class="filter-chip" data-filter="overdue">Overdue</button>
-          <button type="button" class="filter-chip" data-filter="unassigned">Unassigned</button>
+          <button type="button" class="filter-chip is-active" data-filter="all" data-tooltip="Show every task, including Done.">All</button>
+          <button type="button" class="filter-chip" data-filter="mine" data-tooltip="Show active tasks assigned to you.">My next actions</button>
+          <button type="button" class="filter-chip" data-filter="codex" data-tooltip="Show active tasks delegated to Codex.">Codex work</button>
+          <button type="button" class="filter-chip" data-filter="review" data-tooltip="Show tasks that need your review before closing.">Needs review</button>
+          <button type="button" class="filter-chip" data-filter="overdue" data-tooltip="Show active tasks whose due or reminder time has passed.">Overdue</button>
+          <button type="button" class="filter-chip" data-filter="unassigned" data-tooltip="Show active tasks with no clear owner yet.">Unassigned</button>
         </div>
 
         <label class="search">
           <span>Search</span>
           <input id="taskSearch" type="search" autocomplete="off" placeholder="Title, source, or note">
         </label>
+      </section>
+
+      <section class="legend-panel" aria-label="Color legend">
+        <div class="legend-head">
+          <h2>Color legend</h2>
+          <p>Colors mark urgency and attention state.</p>
+        </div>
+        <ul class="legend-list">
+          <li tabindex="0" data-tooltip="Red overrides other colors when due_at or reminder_at is already past.">
+            <span class="legend-swatch swatch-overdue" aria-hidden="true"></span>
+            <strong>Red</strong>
+            <span>overdue</span>
+          </li>
+          <li tabindex="0" data-tooltip="Gold marks P1 urgent work. A subtle gold outline also marks tasks due within 24 hours.">
+            <span class="legend-swatch swatch-urgent" aria-hidden="true"></span>
+            <strong>Gold</strong>
+            <span>P1 / due soon</span>
+          </li>
+          <li tabindex="0" data-tooltip="Blue marks P2 important tasks that should stay visible but are not overdue.">
+            <span class="legend-swatch swatch-important" aria-hidden="true"></span>
+            <strong>Blue</strong>
+            <span>P2 important</span>
+          </li>
+          <li tabindex="0" data-tooltip="Green marks normal active work, usually P3 and lower, unless another state overrides it.">
+            <span class="legend-swatch swatch-normal" aria-hidden="true"></span>
+            <strong>Green</strong>
+            <span>normal</span>
+          </li>
+          <li tabindex="0" data-tooltip="A green filled button or owner pill means the current owner/action is already selected.">
+            <span class="legend-swatch swatch-selected" aria-hidden="true"></span>
+            <strong>Filled</strong>
+            <span>selected owner/status</span>
+          </li>
+        </ul>
       </section>
 
       <div class="workspace">
