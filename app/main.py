@@ -58,6 +58,21 @@ def readyz() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> Response:
+    if settings.local_dev_auth_enabled:
+        request.session["user"] = {
+            "email": settings.local_dev_user_email,
+            "name": "Local Dev",
+            "picture": "",
+        }
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "app_name": settings.app_name,
+                "app_version": settings.app_version,
+                "user": current_user(request),
+            },
+        )
     if not settings.google_oauth_enabled:
         return templates.TemplateResponse(
             "auth_setup.html",
@@ -84,6 +99,13 @@ def index(request: Request) -> Response:
 
 @app.get("/login", response_class=HTMLResponse)
 async def login(request: Request) -> Response:
+    if settings.local_dev_auth_enabled:
+        request.session["user"] = {
+            "email": settings.local_dev_user_email,
+            "name": "Local Dev",
+            "picture": "",
+        }
+        return RedirectResponse(url="/")
     if not settings.google_oauth_enabled:
         return templates.TemplateResponse(
             "auth_setup.html",

@@ -1,5 +1,11 @@
 Personal Task Tracker Changelog
 
+Version 0.2.2 - 2026-05-13
+
+- Added local development auth fallback so `http://127.0.0.1:8000/` opens the tracker UI when Google OAuth is not configured.
+- Kept the fallback disabled in hosted/HTTPS/Firestore environments so production still requires real Google OAuth.
+- Bumped the static asset version from 0.2.1 to 0.2.2.
+
 Version 0.2.1 - 2026-05-13
 
 - Added a compact color legend for overdue, urgent/due-soon, important, normal, and selected states.

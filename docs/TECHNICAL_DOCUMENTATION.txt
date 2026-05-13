@@ -1,21 +1,24 @@
 Personal Task Tracker Technical Documentation
 
-Version: 0.2.1
+Version: 0.2.2
 Last updated: 2026-05-13
 
 Overview
 
 Personal Task Tracker is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, context ingestion, and reminders.
 
-Version 0.2.1 keeps the backend data model unchanged and adds explanatory UI affordances on top of the 0.2.0 command-center design. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
+Version 0.2.2 keeps the backend data model unchanged and adds a local development auth fallback. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
 
 Changed Files
 
 - app/config.py
-  Sets Settings.app_version to 0.2.1.
+  Sets Settings.app_version to 0.2.2.
+  Adds local_dev_auth_enabled for non-hosted runs with no Google OAuth configured.
+  Adds local_dev_user_email for the browser session used by local development.
 
 - app/main.py
   Passes app_version into the index.html template.
+  Allows local development sessions to open the tracker UI directly when Google OAuth is not configured and the app is not hosted.
 
 - app/templates/index.html
   Replaces the old sidebar-plus-board layout with a command-center layout:
@@ -57,11 +60,25 @@ The browser UI computes these display-only concepts locally:
 - Needs review: tasks with waiting_review status.
 - Unassigned: active tasks with unassigned assignee.
 
-No database migration is required for version 0.2.1 because the changes are limited to rendered HTML, static JavaScript, static CSS, and the app version value.
+Local Development Auth
+
+When `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are empty, and the app is not considered hosted, the browser UI creates a local session automatically.
+
+The app is considered hosted when any of these are true:
+
+- Firestore is enabled through `TASK_STORE=firestore`.
+- `SESSION_COOKIE_HTTPS=true`.
+- `PUBLIC_BASE_URL` starts with `https://`.
+
+The local session email is the first configured `ALLOWED_GOOGLE_EMAILS` value, or `local-dev@task-tracker.local` if no allowlist is configured.
+
+This fallback is intended only for local development so the UI can be inspected at `http://127.0.0.1:8000/` without creating Google OAuth credentials.
+
+No database migration is required for version 0.2.2 because the changes are limited to local browser session behavior, rendered HTML, static JavaScript, static CSS, and the app version value.
 
 Rollback Notes
 
-To roll back the UI portion of version 0.2.1, revert these files to the previous version:
+To roll back version 0.2.2, revert these files to the previous version:
 
 - app/config.py
 - app/main.py

@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Personal Task Tracker"
-    app_version: str = "0.2.1"
+    app_version: str = "0.2.2"
     public_base_url: str = ""
     task_store: str = "sqlite"
     database_url: str = "sqlite:///./task_tracker.db"
@@ -27,6 +27,10 @@ class Settings(BaseSettings):
         return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
 
     @property
+    def local_dev_auth_enabled(self) -> bool:
+        return not self.is_hosted and not self.google_oauth_enabled
+
+    @property
     def normalized_public_base_url(self) -> str:
         return self.public_base_url.rstrip("/")
 
@@ -41,6 +45,15 @@ class Settings(BaseSettings):
             for email in self.allowed_google_emails.split(",")
             if email.strip()
         }
+
+    @property
+    def local_dev_user_email(self) -> str:
+        emails = [
+            email.strip().lower()
+            for email in self.allowed_google_emails.split(",")
+            if email.strip()
+        ]
+        return emails[0] if emails else "local-dev@task-tracker.local"
 
     def validate_runtime_config(self) -> None:
         errors = []
