@@ -4,13 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ app_name }}</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v={{ app_version }}">
   </head>
   <body>
     <header class="topbar">
-      <div>
+      <div class="brand">
+        <span class="version">v{{ app_version }}</span>
         <h1>{{ app_name }}</h1>
-        <p>Personal work queue for you and Codex.</p>
+        <p>Focused queue for your next actions and Codex handoffs.</p>
       </div>
       <form class="account" method="post" action="/logout">
         <span>{{ user.email }}</span>
@@ -18,67 +19,134 @@
       </form>
     </header>
 
-    <main class="layout">
-      <section class="panel composer">
-        <h2>New task</h2>
-        <form id="taskForm">
-          <label>Title <input name="title" required maxlength="240"></label>
-          <label>Description <textarea name="description" rows="4"></textarea></label>
-          <div class="grid">
-            <label>Assignee
-              <select name="assignee">
-                <option value="unassigned">Unassigned</option>
-                <option value="me">Me</option>
-                <option value="codex">Codex</option>
-              </select>
-            </label>
-            <label>Status
-              <select name="status">
-                <option value="backlog">Backlog</option>
-                <option value="in_progress">In progress</option>
-                <option value="waiting_review">Waiting review</option>
-                <option value="blocked">Blocked</option>
-              </select>
-            </label>
-            <label>Priority
-              <select name="priority">
-                <option value="1">P1</option>
-                <option value="2">P2</option>
-                <option value="3" selected>P3</option>
-                <option value="4">P4</option>
-                <option value="5">P5</option>
-              </select>
-            </label>
-            <label>Reminder <input name="reminder_at" type="datetime-local"></label>
+    <main class="shell">
+      <section class="command-center" aria-live="polite">
+        <div class="metrics" id="metrics">
+          <div class="metric">
+            <span class="metric-label">Active</span>
+            <strong data-metric="active">0</strong>
           </div>
-          <button type="submit">Create task</button>
-        </form>
+          <div class="metric is-hot">
+            <span class="metric-label">Overdue</span>
+            <strong data-metric="overdue">0</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Mine</span>
+            <strong data-metric="mine">0</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Codex</span>
+            <strong data-metric="codex">0</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Review</span>
+            <strong data-metric="review">0</strong>
+          </div>
+        </div>
+
+        <div class="filters" role="group" aria-label="Task filters">
+          <button type="button" class="filter-chip is-active" data-filter="all">All</button>
+          <button type="button" class="filter-chip" data-filter="mine">My next actions</button>
+          <button type="button" class="filter-chip" data-filter="codex">Codex work</button>
+          <button type="button" class="filter-chip" data-filter="review">Needs review</button>
+          <button type="button" class="filter-chip" data-filter="overdue">Overdue</button>
+          <button type="button" class="filter-chip" data-filter="unassigned">Unassigned</button>
+        </div>
+
+        <label class="search">
+          <span>Search</span>
+          <input id="taskSearch" type="search" autocomplete="off" placeholder="Title, source, or note">
+        </label>
       </section>
 
-      <section class="board" aria-live="polite">
-        <div class="column" data-status="backlog">
-          <h2>Backlog</h2>
-          <div class="tasks" id="backlog"></div>
-        </div>
-        <div class="column" data-status="in_progress">
-          <h2>In progress</h2>
-          <div class="tasks" id="in_progress"></div>
-        </div>
-        <div class="column" data-status="waiting_review">
-          <h2>Waiting review</h2>
-          <div class="tasks" id="waiting_review"></div>
-        </div>
-        <div class="column" data-status="blocked">
-          <h2>Blocked</h2>
-          <div class="tasks" id="blocked"></div>
-        </div>
-        <div class="column" data-status="done">
-          <h2>Done</h2>
-          <div class="tasks" id="done"></div>
-        </div>
-      </section>
+      <div class="workspace">
+        <section class="panel composer">
+          <div class="section-heading">
+            <div>
+              <h2>Capture</h2>
+              <p>Create only the next concrete action.</p>
+            </div>
+          </div>
+          <form id="taskForm">
+            <label>Title <input name="title" required maxlength="240" placeholder="Action, not topic"></label>
+            <label>Description <textarea name="description" rows="5" placeholder="Context, link, or expected outcome"></textarea></label>
+            <div class="grid">
+              <label>Owner
+                <select name="assignee">
+                  <option value="unassigned">Unassigned</option>
+                  <option value="me">Me</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </label>
+              <label>Status
+                <select name="status">
+                  <option value="backlog">Backlog</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="waiting_review">Waiting review</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+              </label>
+              <label>Priority
+                <select name="priority">
+                  <option value="1">P1 urgent</option>
+                  <option value="2">P2 important</option>
+                  <option value="3" selected>P3 normal</option>
+                  <option value="4">P4 low</option>
+                  <option value="5">P5 someday</option>
+                </select>
+              </label>
+              <label>Due <input name="due_at" type="datetime-local"></label>
+              <label class="span-2">Reminder <input name="reminder_at" type="datetime-local"></label>
+            </div>
+            <button type="submit">Create task</button>
+          </form>
+        </section>
+
+        <section class="board" aria-live="polite">
+          <div class="column" data-status="backlog">
+            <div class="column-head">
+              <h2>Backlog</h2>
+              <span class="column-count" data-count="backlog">0</span>
+            </div>
+            <p class="column-hint">Needs triage or a clear owner.</p>
+            <div class="tasks" id="backlog"></div>
+          </div>
+          <div class="column" data-status="in_progress">
+            <div class="column-head">
+              <h2>In progress</h2>
+              <span class="column-count" data-count="in_progress">0</span>
+            </div>
+            <p class="column-hint">Work that is actually moving.</p>
+            <div class="tasks" id="in_progress"></div>
+          </div>
+          <div class="column" data-status="waiting_review">
+            <div class="column-head">
+              <h2>Review</h2>
+              <span class="column-count" data-count="waiting_review">0</span>
+            </div>
+            <p class="column-hint">Codex output waiting for you.</p>
+            <div class="tasks" id="waiting_review"></div>
+          </div>
+          <div class="column" data-status="blocked">
+            <div class="column-head">
+              <h2>Blocked</h2>
+              <span class="column-count" data-count="blocked">0</span>
+            </div>
+            <p class="column-hint">Needs access, answer, or decision.</p>
+            <div class="tasks" id="blocked"></div>
+          </div>
+          <div class="column" data-status="done">
+            <div class="column-head">
+              <h2>Done</h2>
+              <span class="column-count" data-count="done">0</span>
+            </div>
+            <p class="column-hint">Closed and accepted outcomes.</p>
+            <div class="tasks" id="done"></div>
+          </div>
+        </section>
+      </div>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v={{ app_version }}"></script>
   </body>
 </html>

@@ -1,0 +1,13 @@
+Personal Task Tracker Changelog
+
+Version 0.2.0 - 2026-05-13
+
+- Redesigned the main task screen as an operational command center.
+- Added top-level metrics for active, overdue, personal, Codex, and review tasks.
+- Added persistent quick filters: all, my next actions, Codex work, needs review, overdue, and unassigned.
+- Added task search across title, description, source, context, origin, and assignee.
+- Added due date capture in the manual task form using the existing API field.
+- Improved task cards with clearer status, task id, priority labels, assignee labels, source links, due dates, and reminders.
+- Added priority-aware sorting so urgent, overdue, due-soon, and review tasks surface before lower-priority work.
+- Improved responsive layout for desktop and mobile, with stable board columns and readable card controls.
+- Added static asset version query strings so browsers load the new CSS and JS after deployment.

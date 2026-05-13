@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Personal Task Tracker"
+    app_version: str = "0.2.0"
     public_base_url: str = ""
     task_store: str = "sqlite"
     database_url: str = "sqlite:///./task_tracker.db"

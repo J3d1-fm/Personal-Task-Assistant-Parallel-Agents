@@ -1,6 +1,27 @@
 const statuses = ["backlog", "in_progress", "waiting_review", "blocked", "done"];
+const statusLabels = {
+  backlog: "Backlog",
+  in_progress: "In progress",
+  waiting_review: "Review",
+  blocked: "Blocked",
+  done: "Done",
+};
+const filterLabels = {
+  all: "All",
+  mine: "My next actions",
+  codex: "Codex work",
+  review: "Needs review",
+  overdue: "Overdue",
+  unassigned: "Unassigned",
+};
+
 const form = document.querySelector("#taskForm");
+const searchInput = document.querySelector("#taskSearch");
+const filterButtons = [...document.querySelectorAll("[data-filter]")];
 let dragState = null;
+let allTasks = [];
+let activeFilter = localStorage.getItem("taskTrackerFilter") || "all";
+let activeSearch = "";
 
 function headers() {
   const apiKey = localStorage.getItem("taskTrackerApiKey");
@@ -34,6 +55,7 @@ form.addEventListener("submit", async (event) => {
   const payload = Object.fromEntries(data.entries());
   payload.priority = Number(payload.priority);
   payload.origin = "manual";
+  payload.due_at = localDateTimeToIso(payload.due_at);
   payload.reminder_at = localDateTimeToIso(payload.reminder_at);
   if (!payload.description) payload.description = null;
   try {
@@ -43,10 +65,25 @@ form.addEventListener("submit", async (event) => {
     });
     form.reset();
     form.querySelector("[name=priority]").value = "3";
+    activeFilter = "all";
+    persistFilter();
     await loadTasks();
   } catch (error) {
     alert(`Could not create task: ${error.message}`);
   }
+});
+
+filterButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activeFilter = button.dataset.filter;
+    persistFilter();
+    renderTasks();
+  });
+});
+
+searchInput.addEventListener("input", () => {
+  activeSearch = searchInput.value.trim().toLowerCase();
+  renderTasks();
 });
 
 async function updateTask(id, patch) {
@@ -57,9 +94,31 @@ async function updateTask(id, patch) {
   await loadTasks();
 }
 
+function persistFilter() {
+  localStorage.setItem("taskTrackerFilter", activeFilter);
+  filterButtons.forEach((button) => {
+    const isActive = button.dataset.filter === activeFilter;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function activeTasks(tasks = allTasks) {
+  return tasks.filter((task) => task.status !== "done");
+}
+
 function isOverdue(task) {
+  if (task.status === "done") return false;
   const targets = [task.due_at, task.reminder_at].filter(Boolean).map((value) => new Date(value));
   return targets.some((value) => !Number.isNaN(value.valueOf()) && value < new Date());
+}
+
+function isDueSoon(task) {
+  if (task.status === "done") return false;
+  const targets = [task.due_at, task.reminder_at].filter(Boolean).map((value) => new Date(value));
+  const now = new Date();
+  const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  return targets.some((value) => !Number.isNaN(value.valueOf()) && value >= now && value <= soon);
 }
 
 function isNeutralTask(task) {
@@ -76,7 +135,23 @@ function priorityClass(task) {
     else classes.push("priority-normal");
   }
   if (isOverdue(task)) classes.push("is-overdue");
+  if (isDueSoon(task)) classes.push("is-due-soon");
   return classes.join(" ");
+}
+
+function priorityLabel(task) {
+  if (isOverdue(task)) return `P${task.priority} overdue`;
+  if (task.priority === 1) return "P1 urgent";
+  if (task.priority === 2) return "P2 important";
+  if (task.priority === 4) return "P4 low";
+  if (task.priority === 5) return "P5 someday";
+  return "P3 normal";
+}
+
+function assigneeLabel(value) {
+  if (value === "me") return "Me";
+  if (value === "codex") return "Codex";
+  return "Unassigned";
 }
 
 function formatDateTime(value) {
@@ -89,7 +164,7 @@ function formatDateTime(value) {
 }
 
 function titleCaseStatus(value) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return statusLabels[value] || value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function buttonClass(isActive) {
@@ -166,29 +241,48 @@ function setupTaskDrag(node, task) {
   });
 }
 
+function datePills(task) {
+  const pills = [];
+  if (task.due_at) {
+    pills.push(`<span class="pill date-pill" title="${escapeHtml(new Date(task.due_at).toLocaleString())}">Due ${escapeHtml(formatDateTime(task.due_at))}</span>`);
+  }
+  if (task.reminder_at) {
+    pills.push(`<span class="pill date-pill" title="${escapeHtml(new Date(task.reminder_at).toLocaleString())}">Remind ${escapeHtml(formatDateTime(task.reminder_at))}</span>`);
+  }
+  return pills.join("");
+}
+
+function sourceMarkup(task) {
+  const name = task.source_name ? escapeHtml(task.source_name) : "";
+  if (task.source_url) {
+    return `<a class="source-link" href="${escapeHtml(task.source_url)}" target="_blank" rel="noreferrer">${name || "Source"}</a>`;
+  }
+  return name ? `<span class="pill">${name}</span>` : "";
+}
+
 function taskNode(task) {
   const node = document.createElement("article");
   node.className = priorityClass(task);
   node.dataset.taskId = task.id;
   node.setAttribute("aria-label", `${task.title}, ${titleCaseStatus(task.status)}`);
-  const source = task.source_name ? `<span class="pill">${escapeHtml(task.source_name)}</span>` : "";
-  const reminder = task.reminder_at
-    ? `<span class="pill date-pill" title="${escapeHtml(new Date(task.reminder_at).toLocaleString())}">📅 ${escapeHtml(formatDateTime(task.reminder_at))}</span>`
-    : "";
-  const assigneeLabel = task.assignee === "me" ? "Me" : task.assignee === "codex" ? "Codex" : "Unassigned";
   node.innerHTML = `
+    <div class="task-topline">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="status-name">${escapeHtml(titleCaseStatus(task.status))}</span>
+      <span class="task-id">#${task.id}</span>
+    </div>
     <h3>${escapeHtml(task.title)}</h3>
     ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
     <div class="meta">
-      <span class="pill">P${task.priority}</span>
-      <span class="pill">${escapeHtml(assigneeLabel)}</span>
+      <span class="pill priority-pill">${escapeHtml(priorityLabel(task))}</span>
+      <span class="pill assignee-${escapeHtml(task.assignee)}">${escapeHtml(assigneeLabel(task.assignee))}</span>
       <span class="pill">${escapeHtml(task.origin)}</span>
-      ${source}
-      ${reminder}
+      ${sourceMarkup(task)}
+      ${datePills(task)}
     </div>
     <div class="actions">
-      <button class="${buttonClass(task.assignee === "me")}" data-action="me" aria-pressed="${task.assignee === "me"}">Me</button>
-      <button class="${buttonClass(task.assignee === "codex")}" data-action="codex" aria-pressed="${task.assignee === "codex"}">Codex</button>
+      <button class="${buttonClass(task.assignee === "me")}" data-action="me" aria-label="Assign to me" aria-pressed="${task.assignee === "me"}">Me</button>
+      <button class="${buttonClass(task.assignee === "codex")}" data-action="codex" aria-label="Assign to Codex" aria-pressed="${task.assignee === "codex"}">Codex</button>
       <button class="${buttonClass(task.status === "in_progress")}" data-action="start" aria-pressed="${task.status === "in_progress"}">Start</button>
       <button class="${buttonClass(task.status === "waiting_review")}" data-action="review" aria-pressed="${task.status === "waiting_review"}">Review</button>
       <button class="${buttonClass(task.status === "done")}" data-action="done" aria-pressed="${task.status === "done"}">Done</button>
@@ -212,21 +306,98 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function matchesFilter(task) {
+  if (activeFilter === "mine") return task.assignee === "me" && task.status !== "done";
+  if (activeFilter === "codex") return task.assignee === "codex" && task.status !== "done";
+  if (activeFilter === "review") return task.status === "waiting_review";
+  if (activeFilter === "overdue") return isOverdue(task);
+  if (activeFilter === "unassigned") return task.assignee === "unassigned" && task.status !== "done";
+  return true;
+}
+
+function matchesSearch(task) {
+  if (!activeSearch) return true;
+  const haystack = [
+    task.title,
+    task.description,
+    task.source_name,
+    task.source_context,
+    task.origin,
+    task.assignee,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(activeSearch);
+}
+
+function taskRank(task) {
+  let rank = task.priority * 100;
+  if (isOverdue(task)) rank -= 70;
+  if (isDueSoon(task)) rank -= 30;
+  if (task.status === "waiting_review") rank -= 12;
+  if (task.status === "blocked") rank += 15;
+  if (task.status === "done") rank += 200;
+  return rank;
+}
+
+function sortTasks(tasks) {
+  return [...tasks].sort((a, b) => {
+    const rankDelta = taskRank(a) - taskRank(b);
+    if (rankDelta !== 0) return rankDelta;
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+}
+
+function updateMetrics() {
+  const active = activeTasks();
+  const metrics = {
+    active: active.length,
+    overdue: allTasks.filter(isOverdue).length,
+    mine: active.filter((task) => task.assignee === "me").length,
+    codex: active.filter((task) => task.assignee === "codex").length,
+    review: allTasks.filter((task) => task.status === "waiting_review").length,
+  };
+  Object.entries(metrics).forEach(([key, value]) => {
+    const node = document.querySelector(`[data-metric="${key}"]`);
+    if (node) node.textContent = value;
+  });
+}
+
+function emptyMessage(status) {
+  if (activeFilter !== "all" || activeSearch) return `No ${filterLabels[activeFilter].toLowerCase()} here`;
+  if (status === "backlog") return "Nothing to triage";
+  if (status === "in_progress") return "No active work";
+  if (status === "waiting_review") return "Nothing waiting for review";
+  if (status === "blocked") return "Nothing blocked";
+  return "No completed tasks";
+}
+
+function renderTasks() {
+  persistFilter();
+  updateMetrics();
+  const filteredTasks = sortTasks(allTasks.filter((task) => matchesFilter(task) && matchesSearch(task)));
+
+  for (const status of statuses) {
+    const bucket = document.querySelector(`#${status}`);
+    const items = filteredTasks.filter((task) => task.status === status);
+    document.querySelector(`[data-count="${status}"]`).textContent = items.length;
+    bucket.innerHTML = "";
+    if (items.length === 0) {
+      bucket.innerHTML = `<div class="empty">${escapeHtml(emptyMessage(status))}</div>`;
+    } else {
+      for (const task of items) bucket.appendChild(taskNode(task));
+    }
+  }
+}
+
 async function loadTasks() {
   for (const status of statuses) {
-    document.querySelector(`#${status}`).innerHTML = "";
+    document.querySelector(`#${status}`).innerHTML = '<div class="empty">Loading tasks</div>';
   }
   try {
-    const tasks = await request("/api/tasks?include_done=true");
-    for (const status of statuses) {
-      const bucket = document.querySelector(`#${status}`);
-      const items = tasks.filter((task) => task.status === status);
-      if (items.length === 0) {
-        bucket.innerHTML = '<div class="empty">No tasks</div>';
-      } else {
-        for (const task of items) bucket.appendChild(taskNode(task));
-      }
-    }
+    allTasks = await request("/api/tasks?include_done=true");
+    renderTasks();
   } catch (error) {
     for (const status of statuses) {
       document.querySelector(`#${status}`).innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
@@ -234,4 +405,5 @@ async function loadTasks() {
   }
 }
 
+persistFilter();
 loadTasks();

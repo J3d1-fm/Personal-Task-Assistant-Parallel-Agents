@@ -76,6 +76,7 @@ def index(request: Request) -> Response:
         {
             "request": request,
             "app_name": settings.app_name,
+            "app_version": settings.app_version,
             "user": user,
         },
     )

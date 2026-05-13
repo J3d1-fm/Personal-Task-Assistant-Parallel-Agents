@@ -1,0 +1,76 @@
+Personal Task Tracker Technical Documentation
+
+Version: 0.2.0
+Last updated: 2026-05-13
+
+Overview
+
+Personal Task Tracker is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, context ingestion, and reminders.
+
+Version 0.2.0 keeps the backend data model unchanged and focuses on the task board user experience. The design approach is an operational command center: the first screen answers what is active, what is overdue, who owns the next action, and what needs review.
+
+Changed Files
+
+- app/config.py
+  Adds Settings.app_version with value 0.2.0.
+
+- app/main.py
+  Passes app_version into the index.html template.
+
+- app/templates/index.html
+  Replaces the old sidebar-plus-board layout with a command-center layout:
+  top metrics, quick filters, search, capture form, and kanban board.
+  Static CSS and JS links now include ?v={{ app_version }} for cache busting.
+
+- app/static/app.js
+  Adds client-side task state, metrics, persistent filters, search, priority sorting, due-soon and overdue detection, richer card rendering, and column counts.
+  Existing API calls remain unchanged except that manual task creation can now send due_at.
+
+- app/static/styles.css
+  Reworks layout, typography, command-center controls, task cards, responsive behavior, and focus states.
+
+Runtime Behavior
+
+Task loading still calls:
+
+GET /api/tasks?include_done=true
+
+Task creation still calls:
+
+POST /api/tasks
+
+Task updates still call:
+
+PATCH /api/tasks/{task_id}
+
+The browser UI computes these display-only concepts locally:
+
+- Active tasks: all tasks where status is not done.
+- Overdue tasks: active tasks with due_at or reminder_at earlier than the current browser time.
+- Due-soon tasks: active tasks with due_at or reminder_at within the next 24 hours.
+- My next actions: active tasks assigned to me.
+- Codex work: active tasks assigned to codex.
+- Needs review: tasks with waiting_review status.
+- Unassigned: active tasks with unassigned assignee.
+
+No database migration is required for version 0.2.0 because due_at already exists in the Task schema and storage model.
+
+Rollback Notes
+
+To roll back the UI portion of version 0.2.0, revert these files to the previous version:
+
+- app/config.py
+- app/main.py
+- app/templates/index.html
+- app/static/app.js
+- app/static/styles.css
+
+The changelog and this technical documentation can remain as history or be reverted with the same version rollback.
+
+Verification Performed
+
+- node --check app/static/app.js
+- python3 -m compileall app
+- Headless Chromium visual check at 1440x1000 and 390x900.
+- Checked body and board horizontal overflow: 0px on both viewports.
+- Checked clipped button text: none on both viewports.
