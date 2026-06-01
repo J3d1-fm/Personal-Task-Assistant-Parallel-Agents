@@ -1,18 +1,18 @@
 Personal Task Tracker Technical Documentation
 
-Version: 0.2.4
+Version: 0.2.5
 Last updated: 2026-06-01
 
 Overview
 
 Personal Task Tracker is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, context ingestion, and reminders.
 
-Version 0.2.4 keeps Firestore or SQLite as the live task store and adds an optional append-only Google Sheets history export. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
+Version 0.2.5 keeps the storage behavior from 0.2.4 and fixes the remaining desktop layout overlap by giving the kanban board its own full-width row. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
 
 Changed Files
 
 - app/config.py
-  Sets Settings.app_version to 0.2.4.
+  Sets Settings.app_version to 0.2.5.
   Adds local_dev_auth_enabled for non-hosted runs with no Google OAuth configured.
   Adds local_dev_user_email for the browser session used by local development.
   Adds TASK_HISTORY_SHEET_ID and TASK_HISTORY_SHEET_TAB settings for optional spreadsheet history.
@@ -48,6 +48,7 @@ Changed Files
   Adds compact legend styling and reusable tooltip styling for hover and keyboard focus.
   Removes sticky positioning from command/capture panels and uses wider breakpoints to prevent panel overlap.
   Adds destructive styling for Dismiss.
+  In 0.2.5, moves Capture into a full-width row above the board, gives board columns a 300px minimum, and constrains cards, pills, buttons, and inputs to their own containers.
 
 - requirements.txt
   Adds an explicit google-auth dependency for the Sheets history writer.
@@ -144,21 +145,16 @@ The local session email is the first configured `ALLOWED_GOOGLE_EMAILS` value, o
 
 This fallback is intended only for local development so the UI can be inspected at `http://127.0.0.1:8000/` without creating Google OAuth credentials.
 
-No database migration is required for version 0.2.4. The live task schema is unchanged. The only new production configuration is optional Sheets history access.
+No database migration is required for version 0.2.5. The live task schema is unchanged. The only production configuration added in 0.2.4 is optional Sheets history access.
 
 Rollback Notes
 
-To roll back version 0.2.4, revert these files to the previous version:
+To roll back version 0.2.5, revert these files to the previous version:
 
 - app/config.py
-- app/history.py
-- app/main.py
-- app/store.py
-- requirements.txt
-- .env.example
-- deploy/gcloud.example.sh
+- app/static/styles.css
 
-Also unset `TASK_HISTORY_SHEET_ID` on Cloud Run. The changelog and this technical documentation can remain as history or be reverted with the same version rollback.
+The changelog and this technical documentation can remain as history or be reverted with the same version rollback. If rolling back past 0.2.4, also unset `TASK_HISTORY_SHEET_ID` on Cloud Run.
 
 Verification Performed
 
@@ -172,6 +168,8 @@ Verification Performed
 - Production Cloud Run deploy succeeded.
 - Production `/readyz` returned 200.
 - Production end-to-end smoke: created a temporary task through the API, confirmed `created` and `dismissed` rows reached the history sheet, deleted the task, removed the temporary smoke rows from the sheet, and confirmed the live task list no longer contained the temporary task.
+- Version 0.2.5 local visual QA: headless Chrome screenshot at 2048x1115 confirmed Capture is above the kanban board and task cards stay inside their columns.
+- Version 0.2.5 local visual QA: headless Chrome screenshot at 390x900 confirmed mobile filters stack vertically and do not clip long labels.
 - Headless Chromium visual check at 1440x1000 and 390x900.
 - Checked body and board horizontal overflow: 0px on both viewports.
 - Checked clipped button text: none on both viewports.

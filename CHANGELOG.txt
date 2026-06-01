@@ -1,5 +1,12 @@
 Personal Task Tracker Changelog
 
+Version 0.2.5 - 2026-06-01
+
+- Fixed the remaining desktop UI overlap by moving Capture above the kanban board instead of reserving a narrow side panel.
+- Increased kanban column minimum width and kept horizontal scrolling inside the board when the viewport cannot fit all columns.
+- Added layout constraints so task cards, metadata pills, controls, and form inputs cannot overflow into neighboring panels.
+- Bumped the app and static asset version from 0.2.4 to 0.2.5.
+
 Version 0.2.4 - 2026-06-01
 
 - Added optional append-only Google Sheets task history export controlled by `TASK_HISTORY_SHEET_ID` and `TASK_HISTORY_SHEET_TAB`.
