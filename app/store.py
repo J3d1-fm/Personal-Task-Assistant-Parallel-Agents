@@ -11,6 +11,9 @@ from app.schemas import TaskCreate, TaskRead, TaskUpdate
 
 
 class TaskStore(Protocol):
+    def get_task(self, task_id: int) -> TaskRead | None:
+        ...
+
     def list_tasks(
         self,
         *,
@@ -40,6 +43,12 @@ def task_to_read(task: Task) -> TaskRead:
 class SqliteTaskStore:
     def __init__(self, db: Session):
         self.db = db
+
+    def get_task(self, task_id: int) -> TaskRead | None:
+        task = self.db.get(Task, task_id)
+        if task is None:
+            return None
+        return task_to_read(task)
 
     def list_tasks(
         self,
@@ -113,6 +122,12 @@ class FirestoreTaskStore:
     def _doc_to_task(self, snapshot: firestore.DocumentSnapshot) -> TaskRead:
         data = snapshot.to_dict() or {}
         return TaskRead.model_validate(data)
+
+    def get_task(self, task_id: int) -> TaskRead | None:
+        snapshot = self.collection.document(str(task_id)).get()
+        if not snapshot.exists:
+            return None
+        return self._doc_to_task(snapshot)
 
     def list_tasks(
         self,

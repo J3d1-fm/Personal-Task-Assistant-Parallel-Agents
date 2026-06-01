@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Personal Task Tracker"
-    app_version: str = "0.2.3"
+    app_version: str = "0.2.4"
     public_base_url: str = ""
     task_store: str = "sqlite"
     database_url: str = "sqlite:///./task_tracker.db"
@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
     allowed_google_emails: str = ""
+    task_history_sheet_id: str = ""
+    task_history_sheet_tab: str = "Task History"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -37,6 +39,10 @@ class Settings(BaseSettings):
     @property
     def use_firestore(self) -> bool:
         return self.task_store.lower() == "firestore"
+
+    @property
+    def task_history_enabled(self) -> bool:
+        return bool(self.task_history_sheet_id.strip())
 
     @property
     def allowed_email_set(self) -> set[str]:

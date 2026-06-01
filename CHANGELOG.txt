@@ -1,5 +1,13 @@
 Personal Task Tracker Changelog
 
+Version 0.2.4 - 2026-06-01
+
+- Added optional append-only Google Sheets task history export controlled by `TASK_HISTORY_SHEET_ID` and `TASK_HISTORY_SHEET_TAB`.
+- Logged task lifecycle events for created, updated, completed, context-ingested, and dismissed tasks.
+- Kept Firestore/SQLite as the live task store; Sheets failures are logged as warnings and do not block task actions.
+- Added store-level `get_task` support so update/delete events can include previous task state.
+- Bumped the app and static asset version from 0.2.3 to 0.2.4.
+
 Version 0.2.3 - 2026-06-01
 
 - Removed sticky panel behavior and widened responsive breakpoints so command, capture, legend, and board panels do not overlap at common browser widths.

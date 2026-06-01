@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth import current_user, is_allowed_email, require_api_key_or_user
 from app.config import get_settings
 from app.db import Base, engine, get_db
+from app.history import choose_update_action, record_task_event
 from app.models import TaskStatus
 from app.schemas import ContextIngest, ContextIngestResult, TaskCreate, TaskRead, TaskUpdate
 from app.store import get_task_store
@@ -171,22 +172,31 @@ def list_tasks(
 
 @app.post("/api/tasks", response_model=TaskRead, dependencies=[Depends(require_api_key_or_user)])
 def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> TaskRead:
-    return get_task_store(db).create_task(payload)
+    task = get_task_store(db).create_task(payload)
+    record_task_event("created", task)
+    return task
 
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskRead, dependencies=[Depends(require_api_key_or_user)])
 def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)) -> TaskRead:
-    task = get_task_store(db).update_task(task_id, payload)
+    store = get_task_store(db)
+    previous = store.get_task(task_id)
+    task = store.update_task(task_id, payload)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    record_task_event(choose_update_action(task, previous), task, previous=previous)
     return task
 
 
 @app.delete("/api/tasks/{task_id}", dependencies=[Depends(require_api_key_or_user)])
 def delete_task(task_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
-    deleted = get_task_store(db).delete_task(task_id)
+    store = get_task_store(db)
+    previous = store.get_task(task_id)
+    deleted = store.delete_task(task_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
+    if previous is not None:
+        record_task_event("dismissed", previous)
     return {"deleted": True}
 
 
@@ -200,7 +210,9 @@ def ingest_context(payload: ContextIngest, db: Session = Depends(get_db)) -> Con
         data["source_name"] = data.get("source_name") or payload.source_name
         data["source_url"] = data.get("source_url") or payload.source_url
         data["source_context"] = data.get("source_context") or payload.source_context
-        created.append(store.create_task(TaskCreate(**data)))
+        task = store.create_task(TaskCreate(**data))
+        record_task_event("created", task, note="context_ingest")
+        created.append(task)
     return ContextIngestResult(created=created)
 
 
