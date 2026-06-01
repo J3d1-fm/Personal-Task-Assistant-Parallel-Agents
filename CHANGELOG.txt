@@ -1,5 +1,12 @@
 Personal Task Tracker Changelog
 
+Version 0.2.3 - 2026-06-01
+
+- Removed sticky panel behavior and widened responsive breakpoints so command, capture, legend, and board panels do not overlap at common browser widths.
+- Added a Dismiss action on every task card that permanently deletes the task through `DELETE /api/tasks/{task_id}`.
+- Added destructive-action styling and confirmation for Dismiss.
+- Bumped the static asset version from 0.2.2 to 0.2.3.
+
 Version 0.2.2 - 2026-05-13
 
 - Added local development auth fallback so `http://127.0.0.1:8000/` opens the tracker UI when Google OAuth is not configured.

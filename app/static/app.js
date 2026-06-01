@@ -94,6 +94,13 @@ async function updateTask(id, patch) {
   await loadTasks();
 }
 
+async function deleteTask(id) {
+  await request(`/api/tasks/${id}`, {
+    method: "DELETE",
+  });
+  await loadTasks();
+}
+
 function persistFilter() {
   localStorage.setItem("taskTrackerFilter", activeFilter);
   filterButtons.forEach((button) => {
@@ -315,6 +322,7 @@ function taskNode(task) {
       <button class="${buttonClass(task.status === "in_progress")}" data-action="start" aria-pressed="${task.status === "in_progress"}" ${tooltipAttr("Move this task to In progress.")}>Start</button>
       <button class="${buttonClass(task.status === "waiting_review")}" data-action="review" aria-pressed="${task.status === "waiting_review"}" ${tooltipAttr("Move this task to Review.")}>Review</button>
       <button class="${buttonClass(task.status === "done")}" data-action="done" aria-pressed="${task.status === "done"}" ${tooltipAttr("Close this task as accepted.")}>Done</button>
+      <button class="secondary danger-action" data-action="dismiss" ${tooltipAttr("Permanently delete this task from the database.")}>Dismiss</button>
     </div>
   `;
   setupTaskDrag(node, task);
@@ -323,6 +331,14 @@ function taskNode(task) {
   node.querySelector('[data-action="start"]').addEventListener("click", () => updateTask(task.id, { status: "in_progress" }));
   node.querySelector('[data-action="review"]').addEventListener("click", () => updateTask(task.id, { status: "waiting_review" }));
   node.querySelector('[data-action="done"]').addEventListener("click", () => updateTask(task.id, { status: "done" }));
+  node.querySelector('[data-action="dismiss"]').addEventListener("click", async () => {
+    if (!confirm(`Dismiss task #${task.id}? This deletes it from the database.`)) return;
+    try {
+      await deleteTask(task.id);
+    } catch (error) {
+      alert(`Could not dismiss task: ${error.message}`);
+    }
+  });
   return node;
 }
 

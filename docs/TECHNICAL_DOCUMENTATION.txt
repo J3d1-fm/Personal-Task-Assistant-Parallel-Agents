@@ -1,18 +1,18 @@
 Personal Task Tracker Technical Documentation
 
-Version: 0.2.2
-Last updated: 2026-05-13
+Version: 0.2.3
+Last updated: 2026-06-01
 
 Overview
 
 Personal Task Tracker is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, context ingestion, and reminders.
 
-Version 0.2.2 keeps the backend data model unchanged and adds a local development auth fallback. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
+Version 0.2.3 keeps the backend data model unchanged, fixes responsive panel overlap, and adds a destructive Dismiss action for removing tasks from storage. The first screen answers what is active, what is overdue, who owns the next action, what needs review, and what the task colors mean.
 
 Changed Files
 
 - app/config.py
-  Sets Settings.app_version to 0.2.2.
+  Sets Settings.app_version to 0.2.3.
   Adds local_dev_auth_enabled for non-hosted runs with no Google OAuth configured.
   Adds local_dev_user_email for the browser session used by local development.
 
@@ -31,10 +31,13 @@ Changed Files
   Adds client-side task state, metrics, persistent filters, search, priority sorting, due-soon and overdue detection, richer card rendering, and column counts.
   Existing API calls remain unchanged except that manual task creation can now send due_at.
   Adds generated tooltip text for task status, priority, owner, source, dates, and action buttons.
+  Adds deleteTask and a Dismiss button that calls DELETE /api/tasks/{task_id} after user confirmation.
 
 - app/static/styles.css
   Reworks layout, typography, command-center controls, task cards, responsive behavior, and focus states.
   Adds compact legend styling and reusable tooltip styling for hover and keyboard focus.
+  Removes sticky positioning from command/capture panels and uses wider breakpoints to prevent panel overlap.
+  Adds destructive styling for Dismiss.
 
 Runtime Behavior
 
@@ -50,6 +53,12 @@ Task updates still call:
 
 PATCH /api/tasks/{task_id}
 
+Task dismissal calls:
+
+DELETE /api/tasks/{task_id}
+
+Dismiss is a hard delete. It removes the task document or SQLite row from the active store and does not create an audit record.
+
 The browser UI computes these display-only concepts locally:
 
 - Active tasks: all tasks where status is not done.
@@ -59,6 +68,38 @@ The browser UI computes these display-only concepts locally:
 - Codex work: active tasks assigned to codex.
 - Needs review: tasks with waiting_review status.
 - Unassigned: active tasks with unassigned assignee.
+
+Storage And Retention
+
+Production storage:
+
+- Cloud Run runs the FastAPI app.
+- `TASK_STORE=firestore` selects the Firestore backend.
+- Task records are stored in the Firestore collection `tasks`.
+- The numeric task id counter is stored in Firestore at `metadata/task_counter`.
+- There is no TTL, retention job, or archive job in the current code.
+
+Local development storage:
+
+- `TASK_STORE=sqlite` selects the SQLite backend.
+- Tasks are stored in the local SQLite file configured by `DATABASE_URL`, usually `task_tracker.db`.
+
+History behavior:
+
+- `created_at`, `updated_at`, `completed_at`, source fields, and source context are stored on each task.
+- Done tasks remain in storage indefinitely unless deleted.
+- Dismiss deletes the task permanently.
+- There is no separate event history for status changes, owner changes, deletes, or reminder sends.
+
+Spreadsheet option:
+
+The tracker can be backed by Google Sheets, but a spreadsheet is a weaker operational database than Firestore. It is reasonable for a human-readable archive or append-only history export. It is riskier as the primary live store because concurrent writes, id generation, filtering, deletes, API latency, and auth boundaries become more fragile.
+
+Recommended spreadsheet path if needed:
+
+- Keep Firestore as the live task store.
+- Add an append-only Google Sheets history/export sync for created, updated, completed, dismissed, and reminder events.
+- Use Sheets for review/reporting and Firestore for the live queue.
 
 Local Development Auth
 
@@ -74,11 +115,11 @@ The local session email is the first configured `ALLOWED_GOOGLE_EMAILS` value, o
 
 This fallback is intended only for local development so the UI can be inspected at `http://127.0.0.1:8000/` without creating Google OAuth credentials.
 
-No database migration is required for version 0.2.2 because the changes are limited to local browser session behavior, rendered HTML, static JavaScript, static CSS, and the app version value.
+No database migration is required for version 0.2.3 because the dismiss endpoint already existed in the API and both storage backends already implement delete_task.
 
 Rollback Notes
 
-To roll back version 0.2.2, revert these files to the previous version:
+To roll back version 0.2.3, revert these files to the previous version:
 
 - app/config.py
 - app/main.py
@@ -96,3 +137,7 @@ Verification Performed
 - Checked body and board horizontal overflow: 0px on both viewports.
 - Checked clipped button text: none on both viewports.
 - Checked tooltip activation on hover: tooltip pseudo-element displays with opacity 1.
+- Chrome visual check at 1440x1000, 1280x900, 1024x900, and 390x900.
+- Checked panel overlap among command center, legend, capture panel, and board columns: none on tested viewports.
+- Checked Dismiss rendering on populated local UI: 9 Dismiss buttons found for 9 rendered tasks.
+- Checked Dismiss API behavior on a temporary SQLite database: create task, DELETE task, verify task no longer appears.
