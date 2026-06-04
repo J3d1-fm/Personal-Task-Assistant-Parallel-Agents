@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -12,8 +12,16 @@ from app.auth import current_user, is_allowed_email, require_api_key_or_user
 from app.config import get_settings
 from app.db import Base, engine, get_db
 from app.history import choose_update_action, record_task_event
-from app.models import TaskStatus
-from app.schemas import ContextIngest, ContextIngestResult, TaskCreate, TaskRead, TaskUpdate
+from app.models import TaskAssignee, TaskStatus
+from app.schemas import (
+    AgentQueueRead,
+    AgentQueueSummary,
+    ContextIngest,
+    ContextIngestResult,
+    TaskCreate,
+    TaskRead,
+    TaskUpdate,
+)
 from app.store import get_task_store
 
 
@@ -200,9 +208,40 @@ def delete_task(task_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
     return {"deleted": True}
 
 
+@app.get("/api/agent/queue", response_model=AgentQueueRead, dependencies=[Depends(require_api_key_or_user)])
+def agent_queue(
+    db: Session = Depends(get_db),
+    status: TaskStatus | None = None,
+    assignee: TaskAssignee | None = None,
+    include_done: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=250),
+    sort: str = Query(default="smart", pattern="^(smart|due|created|updated|priority|owner)$"),
+) -> AgentQueueRead:
+    all_tasks = get_task_store(db).list_tasks(include_done=True)
+    selected_tasks = [
+        task
+        for task in all_tasks
+        if (include_done or _is_active(task))
+        and (status is None or task.status == status)
+        and (assignee is None or task.assignee == assignee)
+    ]
+    return AgentQueueRead(
+        summary=_agent_queue_summary(all_tasks),
+        tasks=_sort_tasks_for_agent(selected_tasks, sort=sort)[:limit],
+    )
+
+
+@app.post("/api/agent/tasks", response_model=TaskRead, dependencies=[Depends(require_api_key_or_user)])
+def create_agent_task(payload: TaskCreate, db: Session = Depends(get_db)) -> TaskRead:
+    task = get_task_store(db).create_task(payload)
+    record_task_event("created", task, note="agent_api")
+    return task
+
+
 @app.post("/api/ingest/context", response_model=ContextIngestResult, dependencies=[Depends(require_api_key_or_user)])
+@app.post("/api/agent/ingest/context", response_model=ContextIngestResult, dependencies=[Depends(require_api_key_or_user)])
 def ingest_context(payload: ContextIngest, db: Session = Depends(get_db)) -> ContextIngestResult:
-    created: list[Task] = []
+    created: list[TaskRead] = []
     store = get_task_store(db)
     for item in payload.tasks:
         data = item.model_dump()
@@ -219,3 +258,115 @@ def ingest_context(payload: ContextIngest, db: Session = Depends(get_db)) -> Con
 @app.get("/api/reminders/due", response_model=list[TaskRead], dependencies=[Depends(require_api_key_or_user)])
 def due_reminders(db: Session = Depends(get_db), now: datetime | None = None) -> list[TaskRead]:
     return get_task_store(db).due_reminders(now=now)
+
+
+def _is_active(task: TaskRead) -> bool:
+    return task.status not in {TaskStatus.done, TaskStatus.cancelled}
+
+
+def _normalized_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _time_targets(task: TaskRead) -> list[datetime]:
+    return [
+        normalized
+        for normalized in (_normalized_datetime(task.due_at), _normalized_datetime(task.reminder_at))
+        if normalized is not None
+    ]
+
+
+def _is_overdue(task: TaskRead, now: datetime | None = None) -> bool:
+    if not _is_active(task):
+        return False
+    current = now or datetime.now(timezone.utc)
+    return any(target < current for target in _time_targets(task))
+
+
+def _is_due_soon(task: TaskRead, now: datetime | None = None) -> bool:
+    if not _is_active(task):
+        return False
+    current = now or datetime.now(timezone.utc)
+    soon = current + timedelta(days=1)
+    return any(current <= target <= soon for target in _time_targets(task))
+
+
+def _is_codex_ready(task: TaskRead) -> bool:
+    return (
+        _is_active(task)
+        and task.assignee == TaskAssignee.codex
+        and task.status in {TaskStatus.backlog, TaskStatus.in_progress}
+    )
+
+
+def _needs_human_input(task: TaskRead) -> bool:
+    return _is_active(task) and (
+        task.assignee == TaskAssignee.me
+        or task.status in {TaskStatus.waiting_review, TaskStatus.blocked}
+    )
+
+
+def _agent_queue_summary(tasks: list[TaskRead]) -> AgentQueueSummary:
+    now = datetime.now(timezone.utc)
+    active = [task for task in tasks if _is_active(task)]
+    return AgentQueueSummary(
+        active=len(active),
+        overdue=sum(1 for task in active if _is_overdue(task, now)),
+        due_soon=sum(1 for task in active if _is_due_soon(task, now)),
+        codex_ready=sum(1 for task in active if _is_codex_ready(task)),
+        human_input=sum(1 for task in active if _needs_human_input(task)),
+        review=sum(1 for task in active if task.status == TaskStatus.waiting_review),
+        blocked=sum(1 for task in active if task.status == TaskStatus.blocked),
+        unassigned=sum(1 for task in active if task.assignee == TaskAssignee.unassigned),
+    )
+
+
+def _task_rank(task: TaskRead) -> int:
+    rank = task.priority * 100
+    if _is_overdue(task):
+        rank -= 70
+    if _is_due_soon(task):
+        rank -= 30
+    if _is_codex_ready(task):
+        rank -= 18
+    if task.status == TaskStatus.waiting_review:
+        rank -= 12
+    if task.status == TaskStatus.blocked:
+        rank += 15
+    if not _is_active(task):
+        rank += 200
+    return rank
+
+
+def _due_sort_value(task: TaskRead) -> datetime:
+    targets = _time_targets(task)
+    if targets:
+        return min(targets)
+    return datetime.max.replace(tzinfo=timezone.utc)
+
+
+def _timestamp_desc(value: datetime | None) -> float:
+    normalized = _normalized_datetime(value)
+    if normalized is None:
+        return 0
+    return -normalized.timestamp()
+
+
+def _sort_tasks_for_agent(tasks: list[TaskRead], *, sort: str) -> list[TaskRead]:
+    if sort == "due":
+        key = lambda task: (_due_sort_value(task), task.priority, _timestamp_desc(task.updated_at))
+    elif sort == "created":
+        key = lambda task: (_timestamp_desc(task.created_at), task.priority)
+    elif sort == "updated":
+        key = lambda task: (_timestamp_desc(task.updated_at), task.priority)
+    elif sort == "priority":
+        key = lambda task: (task.priority, _due_sort_value(task), _timestamp_desc(task.updated_at))
+    elif sort == "owner":
+        key = lambda task: (str(task.assignee), _due_sort_value(task), task.priority)
+    else:
+        key = lambda task: (_task_rank(task), _due_sort_value(task), _timestamp_desc(task.updated_at))
+    return sorted(tasks, key=key)

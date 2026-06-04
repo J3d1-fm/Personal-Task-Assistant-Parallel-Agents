@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from google.cloud import firestore
@@ -8,6 +8,15 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Task, TaskStatus, utc_now
 from app.schemas import TaskCreate, TaskRead, TaskUpdate
+
+
+DEFAULT_DUE_DAYS_BY_PRIORITY = {
+    1: 1,
+    2: 3,
+    3: 7,
+    4: 14,
+    5: 30,
+}
 
 
 class TaskStore(Protocol):
@@ -40,6 +49,14 @@ def task_to_read(task: Task) -> TaskRead:
     return TaskRead.model_validate(task)
 
 
+def apply_create_defaults(payload: TaskCreate, *, now: datetime | None = None) -> TaskCreate:
+    if payload.due_at is not None:
+        return payload
+    current = now or utc_now()
+    estimate_days = DEFAULT_DUE_DAYS_BY_PRIORITY.get(payload.priority, DEFAULT_DUE_DAYS_BY_PRIORITY[3])
+    return payload.model_copy(update={"due_at": current + timedelta(days=estimate_days)})
+
+
 class SqliteTaskStore:
     def __init__(self, db: Session):
         self.db = db
@@ -67,6 +84,7 @@ class SqliteTaskStore:
         return [task_to_read(task) for task in self.db.scalars(statement).all()]
 
     def create_task(self, payload: TaskCreate) -> TaskRead:
+        payload = apply_create_defaults(payload)
         task = Task(**payload.model_dump())
         self.db.add(task)
         self.db.commit()
@@ -156,6 +174,7 @@ class FirestoreTaskStore:
     def create_task(self, payload: TaskCreate) -> TaskRead:
         now = utc_now()
         task_id = self._next_id()
+        payload = apply_create_defaults(payload, now=now)
         data = payload.model_dump()
         data.update(
             {
@@ -215,7 +234,8 @@ def encode_task_data(data: dict) -> dict:
 def is_reminder_due(task: TaskRead, current: datetime) -> bool:
     if task.status in {TaskStatus.done, TaskStatus.cancelled}:
         return False
-    targets = [value for value in [task.reminder_at, task.due_at] if value is not None]
+    current = normalize_datetime(current)
+    targets = [normalize_datetime(value) for value in [task.reminder_at, task.due_at] if value is not None]
     if not targets:
         return False
     due_at = min(targets)
@@ -223,7 +243,14 @@ def is_reminder_due(task: TaskRead, current: datetime) -> bool:
         return False
     if task.reminder_last_sent_at is None:
         return True
-    return any(task.reminder_last_sent_at < target for target in targets)
+    reminder_last_sent_at = normalize_datetime(task.reminder_last_sent_at)
+    return any(reminder_last_sent_at < target for target in targets)
+
+
+def normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def get_task_store(db: Session | None = None) -> TaskStore:

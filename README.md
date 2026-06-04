@@ -1,13 +1,19 @@
-# Personal Task Tracker
+# Personal Task Assistant
 
-Private task tracker for Personal Codex.
+Personal Task Assistant is an interface for collaboration between a person and an
+AI agent. The agent parses tasks from context, turns them into an operational
+queue, assigns priority and execution roles, starts work that does not need human
+input, and keeps human-dependent tasks visible with minimal required input.
 
 It provides:
 
-- A web UI for reviewing, assigning, and completing tasks.
-- A JSON API for Codex and integrations to create and update tasks.
+- A web UI for reviewing, sorting, assigning, and completing human/AI tasks.
+- A JSON API for agents and integrations to create, ingest, read, and update tasks.
 - Database-backed storage, with SQLite for local development and Firestore for Google Cloud.
+- Automatic DD estimates when the source did not provide a deadline.
 - Reminder fields so missed tasks can be queried and notified.
+- Role-oriented queues for agent-ready work, human input, review, blocked work,
+  and unassigned tasks.
 
 ## Local Development
 
@@ -20,7 +26,8 @@ uvicorn app.main:app --reload
 ```
 
 Open `http://127.0.0.1:8000`.
-This workspace currently has a local `.env` with `TASK_TRACKER_API_KEY=dev-key`.
+Use your own local `.env`; never commit real API keys, OAuth secrets, databases,
+or service-account files.
 
 ## Google Login
 
@@ -65,24 +72,19 @@ Main endpoints:
 - `GET /api/tasks`
 - `POST /api/tasks`
 - `PATCH /api/tasks/{task_id}`
+- `DELETE /api/tasks/{task_id}`
+- `GET /api/agent/queue`
+- `POST /api/agent/tasks`
+- `POST /api/agent/ingest/context`
 - `POST /api/ingest/context`
 - `GET /api/reminders/due`
+
+For day-to-day PM usage, see `docs/PM_GUIDE.md`. For integration examples, see
+`docs/API.md`.
 
 ## Google Cloud
 
 The intended production shape is Cloud Run + Firestore.
-
-Production URL:
-
-```text
-https://personal-task-tracker-avip7vhgqq-ew.a.run.app
-```
-
-Google OAuth redirect URI for production:
-
-```text
-https://personal-task-tracker-avip7vhgqq-ew.a.run.app/auth/google/callback
-```
 
 Use `deploy/gcloud.example.sh` as a deployment checklist after creating a GCP project,
 Artifact Registry repository, Firestore database, and Secret Manager secrets.
@@ -94,3 +96,7 @@ PUBLIC_BASE_URL=https://<cloud-run-url>
 SESSION_COOKIE_HTTPS=true
 TASK_STORE=firestore
 ```
+
+## License
+
+MIT. See `LICENSE`.

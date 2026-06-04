@@ -59,3 +59,18 @@ class ContextIngest(BaseModel):
 class ContextIngestResult(BaseModel):
     created: list[TaskRead]
 
+
+class AgentQueueSummary(BaseModel):
+    active: int
+    overdue: int
+    due_soon: int
+    codex_ready: int
+    human_input: int
+    review: int
+    blocked: int
+    unassigned: int
+
+
+class AgentQueueRead(BaseModel):
+    summary: AgentQueueSummary
+    tasks: list[TaskRead]

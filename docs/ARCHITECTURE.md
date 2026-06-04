@@ -8,7 +8,8 @@
 - `SESSION_COOKIE_HTTPS=true` should be used behind HTTPS in Cloud Run.
 - SQLAlchemy stores tasks in SQLite locally.
 - Firestore stores tasks in Google Cloud when `TASK_STORE=firestore`.
-- Codex extracts tasks from Slack, Telegram, Gmail, or other context and writes them through the API.
+- Codex or another AI agent extracts tasks from Slack, Telegram, Gmail, or other context and writes them through the API.
+- Agent clients can read a role-aware execution queue through `/api/agent/queue`.
 - Reminder polling calls `/api/reminders/due`, sends notifications, then marks each reminder as sent.
 
 ## Google Cloud Target
@@ -29,3 +30,6 @@ Task fields intentionally stay small:
 - `origin`: `manual`, `slack`, `telegram`, `email`, `codex`, `other`
 - `priority`, `due_at`, `reminder_at`
 - `source_name`, `source_url`, `source_context`
+
+`created_at` is the date the task was set. `due_at` is the DD. If an API client
+omits `due_at`, the store layer estimates DD from priority before saving.

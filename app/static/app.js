@@ -8,19 +8,25 @@ const statusLabels = {
 };
 const filterLabels = {
   all: "All",
-  mine: "My next actions",
-  codex: "Codex work",
+  codex_ready: "Agent queue",
+  human_input: "Human input",
+  mine: "My tasks",
   review: "Needs review",
   overdue: "Overdue",
   unassigned: "Unassigned",
 };
+const legacyFilters = {
+  codex: "codex_ready",
+};
 
 const form = document.querySelector("#taskForm");
 const searchInput = document.querySelector("#taskSearch");
+const sortSelect = document.querySelector("#taskSort");
 const filterButtons = [...document.querySelectorAll("[data-filter]")];
 let dragState = null;
 let allTasks = [];
-let activeFilter = localStorage.getItem("taskTrackerFilter") || "all";
+let activeFilter = normalizeFilter(localStorage.getItem("taskTrackerFilter"));
+let activeSort = localStorage.getItem("taskTrackerSort") || "smart";
 let activeSearch = "";
 
 function headers() {
@@ -86,6 +92,12 @@ searchInput.addEventListener("input", () => {
   renderTasks();
 });
 
+sortSelect.addEventListener("change", () => {
+  activeSort = sortSelect.value;
+  persistSort();
+  renderTasks();
+});
+
 function replaceTask(id, nextTask) {
   allTasks = allTasks.map((task) => (task.id === id ? nextTask : task));
 }
@@ -134,6 +146,7 @@ async function deleteTask(id) {
 }
 
 function persistFilter() {
+  activeFilter = normalizeFilter(activeFilter);
   localStorage.setItem("taskTrackerFilter", activeFilter);
   filterButtons.forEach((button) => {
     const isActive = button.dataset.filter === activeFilter;
@@ -142,22 +155,44 @@ function persistFilter() {
   });
 }
 
+function normalizeFilter(value) {
+  const migrated = legacyFilters[value] || value || "all";
+  return filterLabels[migrated] ? migrated : "all";
+}
+
+function persistSort() {
+  localStorage.setItem("taskTrackerSort", activeSort);
+  sortSelect.value = activeSort;
+}
+
+function isActiveTask(task) {
+  return !["done", "cancelled"].includes(task.status);
+}
+
 function activeTasks(tasks = allTasks) {
-  return tasks.filter((task) => task.status !== "done");
+  return tasks.filter(isActiveTask);
 }
 
 function isOverdue(task) {
-  if (task.status === "done") return false;
+  if (!isActiveTask(task)) return false;
   const targets = [task.due_at, task.reminder_at].filter(Boolean).map((value) => new Date(value));
   return targets.some((value) => !Number.isNaN(value.valueOf()) && value < new Date());
 }
 
 function isDueSoon(task) {
-  if (task.status === "done") return false;
+  if (!isActiveTask(task)) return false;
   const targets = [task.due_at, task.reminder_at].filter(Boolean).map((value) => new Date(value));
   const now = new Date();
   const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   return targets.some((value) => !Number.isNaN(value.valueOf()) && value >= now && value <= soon);
+}
+
+function isCodexReady(task) {
+  return isActiveTask(task) && task.assignee === "codex" && ["backlog", "in_progress"].includes(task.status);
+}
+
+function needsHumanInput(task) {
+  return isActiveTask(task) && (task.assignee === "me" || task.status === "waiting_review" || task.status === "blocked");
 }
 
 function isNeutralTask(task) {
@@ -190,11 +225,11 @@ function priorityLabel(task) {
 function priorityTooltip(task) {
   if (isOverdue(task)) return "Overdue: the due date or reminder time has already passed.";
   if (isDueSoon(task)) return "Due soon: the due date or reminder is within the next 24 hours.";
-  if (task.priority === 1) return "P1 urgent: handle now or today.";
-  if (task.priority === 2) return "P2 important: should be handled soon.";
-  if (task.priority === 4) return "P4 low: useful, but not time-sensitive.";
-  if (task.priority === 5) return "P5 someday: optional or later.";
-  return "P3 normal: default task priority.";
+  if (task.priority === 1) return "P1 urgent: default DD is about 1 day if no source deadline is provided.";
+  if (task.priority === 2) return "P2 important: default DD is about 3 days if no source deadline is provided.";
+  if (task.priority === 4) return "P4 low: default DD is about 14 days if no source deadline is provided.";
+  if (task.priority === 5) return "P5 someday: default DD is about 30 days if no source deadline is provided.";
+  return "P3 normal: default DD is about 7 days if no source deadline is provided.";
 }
 
 function assigneeLabel(value) {
@@ -325,8 +360,11 @@ function setupTaskDrag(node, task) {
 
 function datePills(task) {
   const pills = [];
+  if (task.created_at) {
+    pills.push(`<span class="pill date-pill" ${tooltipAttr(`Date set: ${new Date(task.created_at).toLocaleString()}`)}>Set ${escapeHtml(formatDateTime(task.created_at))}</span>`);
+  }
   if (task.due_at) {
-    pills.push(`<span class="pill date-pill" ${tooltipAttr(`Due date: ${new Date(task.due_at).toLocaleString()}`)}>Due ${escapeHtml(formatDateTime(task.due_at))}</span>`);
+    pills.push(`<span class="pill date-pill" ${tooltipAttr(`DD: ${new Date(task.due_at).toLocaleString()}. If the source did not provide a date, the server estimates DD from priority.`)}>DD ${escapeHtml(formatDateTime(task.due_at))}</span>`);
   }
   if (task.reminder_at) {
     pills.push(`<span class="pill date-pill" ${tooltipAttr(`Reminder time: ${new Date(task.reminder_at).toLocaleString()}`)}>Remind ${escapeHtml(formatDateTime(task.reminder_at))}</span>`);
@@ -406,11 +444,12 @@ function escapeHtml(value) {
 }
 
 function matchesFilter(task) {
-  if (activeFilter === "mine") return task.assignee === "me" && task.status !== "done";
-  if (activeFilter === "codex") return task.assignee === "codex" && task.status !== "done";
+  if (activeFilter === "codex_ready") return isCodexReady(task);
+  if (activeFilter === "human_input") return needsHumanInput(task);
+  if (activeFilter === "mine") return task.assignee === "me" && isActiveTask(task);
   if (activeFilter === "review") return task.status === "waiting_review";
   if (activeFilter === "overdue") return isOverdue(task);
-  if (activeFilter === "unassigned") return task.assignee === "unassigned" && task.status !== "done";
+  if (activeFilter === "unassigned") return task.assignee === "unassigned" && isActiveTask(task);
   return true;
 }
 
@@ -434,17 +473,43 @@ function taskRank(task) {
   let rank = task.priority * 100;
   if (isOverdue(task)) rank -= 70;
   if (isDueSoon(task)) rank -= 30;
+  if (isCodexReady(task)) rank -= 18;
   if (task.status === "waiting_review") rank -= 12;
   if (task.status === "blocked") rank += 15;
-  if (task.status === "done") rank += 200;
+  if (!isActiveTask(task)) rank += 200;
   return rank;
+}
+
+function dateValue(value, fallback) {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf()) ? fallback : parsed.getTime();
+}
+
+function dueSortValue(task) {
+  return Math.min(
+    dateValue(task.due_at, Number.POSITIVE_INFINITY),
+    dateValue(task.reminder_at, Number.POSITIVE_INFINITY),
+  );
 }
 
 function sortTasks(tasks) {
   return [...tasks].sort((a, b) => {
+    if (activeSort === "due") {
+      return dueSortValue(a) - dueSortValue(b) || a.priority - b.priority || dateValue(b.updated_at, 0) - dateValue(a.updated_at, 0);
+    }
+    if (activeSort === "created") {
+      return dateValue(b.created_at, 0) - dateValue(a.created_at, 0) || a.priority - b.priority;
+    }
+    if (activeSort === "updated") {
+      return dateValue(b.updated_at, 0) - dateValue(a.updated_at, 0) || a.priority - b.priority;
+    }
+    if (activeSort === "owner") {
+      return a.assignee.localeCompare(b.assignee) || dueSortValue(a) - dueSortValue(b) || a.priority - b.priority;
+    }
     const rankDelta = taskRank(a) - taskRank(b);
     if (rankDelta !== 0) return rankDelta;
-    return new Date(b.updated_at) - new Date(a.updated_at);
+    return dueSortValue(a) - dueSortValue(b) || dateValue(b.updated_at, 0) - dateValue(a.updated_at, 0);
   });
 }
 
@@ -453,8 +518,8 @@ function updateMetrics() {
   const metrics = {
     active: active.length,
     overdue: allTasks.filter(isOverdue).length,
-    mine: active.filter((task) => task.assignee === "me").length,
-    codex: active.filter((task) => task.assignee === "codex").length,
+    codex_ready: active.filter(isCodexReady).length,
+    human_input: active.filter(needsHumanInput).length,
     review: allTasks.filter((task) => task.status === "waiting_review").length,
   };
   Object.entries(metrics).forEach(([key, value]) => {
@@ -464,7 +529,8 @@ function updateMetrics() {
 }
 
 function emptyMessage(status) {
-  if (activeFilter !== "all" || activeSearch) return `No ${filterLabels[activeFilter].toLowerCase()} here`;
+  const activeFilterLabel = filterLabels[activeFilter] || filterLabels.all;
+  if (activeFilter !== "all" || activeSearch) return `No ${activeFilterLabel.toLowerCase()} here`;
   if (status === "backlog") return "Nothing to triage";
   if (status === "in_progress") return "No active work";
   if (status === "waiting_review") return "Nothing waiting for review";
@@ -505,4 +571,5 @@ async function loadTasks() {
 }
 
 persistFilter();
+persistSort();
 loadTasks();

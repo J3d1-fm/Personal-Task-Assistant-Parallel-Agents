@@ -14,8 +14,8 @@ def main() -> int:
     parser.add_argument("--api-key", default=os.getenv("TASK_TRACKER_API_KEY"))
     parser.add_argument(
         "--notify",
-        default="/Users/phil/.local/bin/personal-codex-notify",
-        help="Path to personal-codex-notify.",
+        default=os.getenv("TASK_REMINDER_NOTIFY_COMMAND", "personal-codex-notify"),
+        help="Notification command to run for each due reminder.",
     )
     args = parser.parse_args()
 
@@ -34,10 +34,14 @@ def main() -> int:
     for task in tasks:
         title = f"Task reminder: {task['title'][:80]}"
         message = task.get("description") or f"Status: {task['status']}, assignee: {task['assignee']}"
-        subprocess.run(
-            [args.notify, "--level", "important", "--title", title, message],
-            check=False,
-        )
+        try:
+            subprocess.run(
+                [args.notify, "--level", "important", "--title", title, message],
+                check=False,
+            )
+        except FileNotFoundError:
+            print(f"notification command not found: {args.notify}", file=sys.stderr)
+            return 3
         requests.patch(
             f"{args.base_url.rstrip('/')}/api/tasks/{task['id']}",
             headers={"Authorization": f"Bearer {args.api_key}"},
@@ -51,4 +55,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

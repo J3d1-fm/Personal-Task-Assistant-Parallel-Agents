@@ -1,4 +1,19 @@
-Personal Task Tracker Changelog
+Personal Task Assistant Changelog
+
+Version 0.3.0 - 2026-06-04
+
+- Renamed the product surface to Personal Task Assistant for human/AI task collaboration.
+- Added automatic DD estimates when created or ingested tasks do not provide `due_at`.
+- Added Set and DD pills to task cards so date set and deadline stay visible.
+- Added persisted UI sorting by smart priority, nearest DD, newest date set, recently updated, and owner then DD.
+- Added Agent queue and Human input filters/metrics for Codex-executable work and person-dependent work.
+- Added `/api/agent/queue`, `/api/agent/tasks`, and `/api/agent/ingest/context` for external agent clients.
+- Fixed SQLite reminder datetime normalization after automatic DD assignment.
+- Added a safe migration for the old persisted `codex` UI filter.
+- Removed a local absolute notification path from the reminder helper script.
+- Expanded ignored local env, database, and credential file patterns.
+- Added MIT license and sanitized public documentation for GitHub publishing.
+- Bumped the app and static asset version from 0.2.6 to 0.3.0.
 
 Version 0.2.6 - 2026-06-04
 

@@ -11,7 +11,7 @@
       <div class="brand">
         <span class="version">v{{ app_version }}</span>
         <h1>{{ app_name }}</h1>
-        <p>Focused queue for your next actions and Codex handoffs.</p>
+        <p>Shared operating queue for human decisions and AI agent execution.</p>
       </div>
       <form class="account" method="post" action="/logout">
         <span>{{ user.email }}</span>
@@ -30,13 +30,13 @@
             <span class="metric-label">Overdue</span>
             <strong data-metric="overdue">0</strong>
           </div>
-          <div class="metric" tabindex="0" data-tooltip="Active tasks where you own the next action.">
-            <span class="metric-label">Mine</span>
-            <strong data-metric="mine">0</strong>
+          <div class="metric" tabindex="0" data-tooltip="Active Codex-owned tasks that are not blocked and are not waiting for review.">
+            <span class="metric-label">Agent queue</span>
+            <strong data-metric="codex_ready">0</strong>
           </div>
-          <div class="metric" tabindex="0" data-tooltip="Active tasks delegated to Codex.">
-            <span class="metric-label">Codex</span>
-            <strong data-metric="codex">0</strong>
+          <div class="metric" tabindex="0" data-tooltip="Active tasks that need a human decision, review, or next action.">
+            <span class="metric-label">Human input</span>
+            <strong data-metric="human_input">0</strong>
           </div>
           <div class="metric" tabindex="0" data-tooltip="Tasks waiting for you to inspect and accept the result.">
             <span class="metric-label">Review</span>
@@ -46,17 +46,30 @@
 
         <div class="filters" role="group" aria-label="Task filters">
           <button type="button" class="filter-chip is-active" data-filter="all" data-tooltip="Show every task, including Done.">All</button>
-          <button type="button" class="filter-chip" data-filter="mine" data-tooltip="Show active tasks assigned to you.">My next actions</button>
-          <button type="button" class="filter-chip" data-filter="codex" data-tooltip="Show active tasks delegated to Codex.">Codex work</button>
+          <button type="button" class="filter-chip" data-filter="codex_ready" data-tooltip="Show active tasks Codex can work on without extra human input.">Agent queue</button>
+          <button type="button" class="filter-chip" data-filter="human_input" data-tooltip="Show tasks that need your decision, review, or action.">Human input</button>
+          <button type="button" class="filter-chip" data-filter="mine" data-tooltip="Show active tasks assigned to you.">My tasks</button>
           <button type="button" class="filter-chip" data-filter="review" data-tooltip="Show tasks that need your review before closing.">Needs review</button>
           <button type="button" class="filter-chip" data-filter="overdue" data-tooltip="Show active tasks whose due or reminder time has passed.">Overdue</button>
           <button type="button" class="filter-chip" data-filter="unassigned" data-tooltip="Show active tasks with no clear owner yet.">Unassigned</button>
         </div>
 
-        <label class="search">
-          <span>Search</span>
-          <input id="taskSearch" type="search" autocomplete="off" placeholder="Title, source, or note">
-        </label>
+        <div class="controls">
+          <label class="sort-control">
+            <span>Sort</span>
+            <select id="taskSort">
+              <option value="smart">Smart priority</option>
+              <option value="due">DD nearest</option>
+              <option value="created">Date set newest</option>
+              <option value="updated">Recently updated</option>
+              <option value="owner">Owner then DD</option>
+            </select>
+          </label>
+          <label class="search">
+            <span>Search</span>
+            <input id="taskSearch" type="search" autocomplete="off" placeholder="Title, source, or note">
+          </label>
+        </div>
       </section>
 
       <section class="legend-panel" aria-label="Color legend">
@@ -129,7 +142,7 @@
                   <option value="5">P5 someday</option>
                 </select>
               </label>
-              <label>Due <input name="due_at" type="datetime-local"></label>
+              <label>DD <input name="due_at" type="datetime-local"></label>
               <label class="span-2">Reminder <input name="reminder_at" type="datetime-local"></label>
             </div>
             <button type="submit">Create task</button>
