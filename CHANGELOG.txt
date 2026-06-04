@@ -1,5 +1,12 @@
 Personal Task Tracker Changelog
 
+Version 0.2.6 - 2026-06-04
+
+- Made task status and assignee transitions optimistic so card moves render immediately after button clicks or drag/drop.
+- Removed the extra full task-list reload after every PATCH and DELETE action.
+- Reduced drag/drop pointer-loop work by caching column hit areas and updating only the active drop target.
+- Bumped the app and static asset version from 0.2.5 to 0.2.6.
+
 Version 0.2.5 - 2026-06-01
 
 - Fixed the remaining desktop UI overlap by moving Capture above the kanban board instead of reserving a narrow side panel.

@@ -86,19 +86,51 @@ searchInput.addEventListener("input", () => {
   renderTasks();
 });
 
+function replaceTask(id, nextTask) {
+  allTasks = allTasks.map((task) => (task.id === id ? nextTask : task));
+}
+
 async function updateTask(id, patch) {
-  await request(`/api/tasks/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
-  await loadTasks();
+  const currentTask = allTasks.find((task) => task.id === id);
+  if (!currentTask) return;
+
+  const optimisticTask = {
+    ...currentTask,
+    ...patch,
+    updated_at: new Date().toISOString(),
+    completed_at: patch.status === "done" ? new Date().toISOString() : patch.status ? null : currentTask.completed_at,
+  };
+  replaceTask(id, optimisticTask);
+  renderTasks();
+
+  try {
+    const savedTask = await request(`/api/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    replaceTask(id, savedTask);
+    renderTasks();
+  } catch (error) {
+    replaceTask(id, currentTask);
+    renderTasks();
+    throw error;
+  }
 }
 
 async function deleteTask(id) {
-  await request(`/api/tasks/${id}`, {
-    method: "DELETE",
-  });
-  await loadTasks();
+  const previousTasks = allTasks;
+  allTasks = allTasks.filter((task) => task.id !== id);
+  renderTasks();
+
+  try {
+    await request(`/api/tasks/${id}`, {
+      method: "DELETE",
+    });
+  } catch (error) {
+    allTasks = previousTasks;
+    renderTasks();
+    throw error;
+  }
 }
 
 function persistFilter() {
@@ -211,18 +243,29 @@ function clearDropTargets() {
   document.querySelectorAll(".column.is-drop-target").forEach((column) => column.classList.remove("is-drop-target"));
 }
 
-function columnAtPoint(x, y, draggedNode) {
-  const previousPointerEvents = draggedNode.style.pointerEvents;
-  draggedNode.style.pointerEvents = "none";
-  const column = document.elementFromPoint(x, y)?.closest(".column");
-  draggedNode.style.pointerEvents = previousPointerEvents;
-  return column;
+function measureColumns() {
+  return [...document.querySelectorAll(".column")].map((column) => ({
+    node: column,
+    rect: column.getBoundingClientRect(),
+  }));
+}
+
+function columnAtPoint(x, y) {
+  return dragState?.columns.find(({ rect }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)?.node || null;
+}
+
+function setDropTarget(column) {
+  if (dragState?.dropTarget === column) return;
+  dragState?.dropTarget?.classList.remove("is-drop-target");
+  column?.classList.add("is-drop-target");
+  if (dragState) dragState.dropTarget = column;
 }
 
 function resetDragNode(node) {
   node.classList.remove("is-dragging");
   node.style.transform = "";
   node.style.zIndex = "";
+  node.style.willChange = "";
 }
 
 function setupTaskDrag(node, task) {
@@ -235,6 +278,8 @@ function setupTaskDrag(node, task) {
       startX: event.clientX,
       startY: event.clientY,
       active: false,
+      columns: [],
+      dropTarget: null,
     };
     node.setPointerCapture(event.pointerId);
   });
@@ -245,17 +290,18 @@ function setupTaskDrag(node, task) {
     const deltaY = event.clientY - dragState.startY;
     if (!dragState.active && Math.hypot(deltaX, deltaY) < 8) return;
     dragState.active = true;
+    if (dragState.columns.length === 0) dragState.columns = measureColumns();
     node.classList.add("is-dragging");
     node.style.zIndex = "10";
+    node.style.willChange = "transform";
     node.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-    clearDropTargets();
-    columnAtPoint(event.clientX, event.clientY, node)?.classList.add("is-drop-target");
+    setDropTarget(columnAtPoint(event.clientX, event.clientY));
   });
 
   node.addEventListener("pointerup", async (event) => {
     if (!dragState || dragState.pointerId !== event.pointerId || dragState.node !== node) return;
     const { active, taskId } = dragState;
-    const column = active ? columnAtPoint(event.clientX, event.clientY, node) : null;
+    const column = active ? columnAtPoint(event.clientX, event.clientY) : null;
     dragState = null;
     clearDropTargets();
     resetDragNode(node);
@@ -326,11 +372,11 @@ function taskNode(task) {
     </div>
   `;
   setupTaskDrag(node, task);
-  node.querySelector('[data-action="me"]').addEventListener("click", () => updateTask(task.id, { assignee: "me" }));
-  node.querySelector('[data-action="codex"]').addEventListener("click", () => updateTask(task.id, { assignee: "codex" }));
-  node.querySelector('[data-action="start"]').addEventListener("click", () => updateTask(task.id, { status: "in_progress" }));
-  node.querySelector('[data-action="review"]').addEventListener("click", () => updateTask(task.id, { status: "waiting_review" }));
-  node.querySelector('[data-action="done"]').addEventListener("click", () => updateTask(task.id, { status: "done" }));
+  node.querySelector('[data-action="me"]').addEventListener("click", () => applyTaskPatch(task.id, { assignee: "me" }, "assign task"));
+  node.querySelector('[data-action="codex"]').addEventListener("click", () => applyTaskPatch(task.id, { assignee: "codex" }, "assign task"));
+  node.querySelector('[data-action="start"]').addEventListener("click", () => applyTaskPatch(task.id, { status: "in_progress" }, "move task"));
+  node.querySelector('[data-action="review"]').addEventListener("click", () => applyTaskPatch(task.id, { status: "waiting_review" }, "move task"));
+  node.querySelector('[data-action="done"]').addEventListener("click", () => applyTaskPatch(task.id, { status: "done" }, "close task"));
   node.querySelector('[data-action="dismiss"]').addEventListener("click", async () => {
     if (!confirm(`Dismiss task #${task.id}? This deletes it from the database.`)) return;
     try {
@@ -340,6 +386,14 @@ function taskNode(task) {
     }
   });
   return node;
+}
+
+async function applyTaskPatch(id, patch, actionLabel) {
+  try {
+    await updateTask(id, patch);
+  } catch (error) {
+    alert(`Could not ${actionLabel}: ${error.message}`);
+  }
 }
 
 function escapeHtml(value) {
