@@ -1,5 +1,15 @@
 Personal Task Assistant Changelog
 
+Version 0.4.1 - 2026-06-05
+
+- Updated `POST /api/agent/parallel/claim` so a runner can claim Codex-owned tasks that are already `in_progress` when they do not yet have an active `agent_id` or `agent_run_id`.
+- Added `claim_started_without_agent` to the parallel claim payload; it defaults to `true` and can be set to `false` for strict backlog-only runs.
+- Added the `needs_input` agent report status and `question_text` so a runner can block a task with a clear user question and return the same question in the chat-ready report.
+- Required non-empty `question_text` for `needs_input` reports.
+- Cleared active claim identity after accepted reports so answered or reopened Codex tasks can be claimed by a fresh run.
+- Rendered `question_text` inside the collapsible Codex work report section.
+- Bumped the app and static asset version from 0.4.0 to 0.4.1.
+
 Version 0.4.0 - 2026-06-05
 
 - Added `POST /api/agent/parallel/claim` so an external Codex runner can claim multiple ready Codex tasks in one run and assign each task to a different agent id.

@@ -121,9 +121,16 @@ External runners can process Codex-owned tasks in parallel:
 3. Have each worker call `POST /api/agent/tasks/{task_id}/report` with its
    `agent_id` and the returned `run_id` when it finishes.
 
+By default, claim also binds Codex-owned `in_progress` tasks that do not yet have
+an active agent identity. This supports the manual flow where a user assigns a
+card to Codex, moves it to `In progress`, and expects the runner to pick it up.
+
 The report endpoint appends a compact work report to the task description, moves
 successful work to `waiting_review` by default, and returns chat-ready text that
 the runner can post back into Telegram, Slack, or another conversation.
+If the worker needs a decision or missing input, it can report `needs_input` with
+`question_text`; the task moves to `blocked` and the chat-ready report includes
+the question.
 
 ## Integration Model
 

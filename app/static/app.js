@@ -28,6 +28,7 @@ const workReportKeys = new Set([
   "artifact_url",
   "summary",
   "message_text",
+  "question_text",
 ]);
 
 const form = document.querySelector("#taskForm");
@@ -447,6 +448,7 @@ function workReportMarkup(report) {
       <div class="report-summary">${escapeHtml(report.summary)}</div>
       ${rows ? `<dl class="report-grid">${rows}</dl>` : ""}
       ${report.message_text ? `<pre class="report-message">${escapeHtml(report.message_text)}</pre>` : ""}
+      ${report.question_text ? `<pre class="report-message report-question">${escapeHtml(report.question_text)}</pre>` : ""}
     </details>
   `;
 }

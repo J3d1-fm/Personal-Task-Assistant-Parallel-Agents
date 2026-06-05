@@ -257,7 +257,7 @@ def claim_parallel_agent_tasks(payload: AgentParallelClaim, db: Session = Depend
     ready_tasks = [
         task
         for task in _sort_tasks_for_agent(store.list_tasks(include_done=True), sort=payload.sort)
-        if task.assignee == TaskAssignee.codex and task.status == TaskStatus.backlog
+        if _is_claimable_by_parallel_runner(task, claim_started_without_agent=payload.claim_started_without_agent)
     ]
     agent_ids = [_normalize_agent_id(value) for value in payload.agent_ids if value.strip()]
     if not agent_ids:
@@ -266,7 +266,12 @@ def claim_parallel_agent_tasks(payload: AgentParallelClaim, db: Session = Depend
     assignments: list[AgentTaskAssignment] = []
     for index, task in enumerate(selected_tasks):
         agent_id = agent_ids[index]
-        claimed = store.claim_task_for_agent(task.id, agent_id=agent_id, run_id=run_id)
+        claimed = store.claim_task_for_agent(
+            task.id,
+            agent_id=agent_id,
+            run_id=run_id,
+            claim_started_without_agent=payload.claim_started_without_agent,
+        )
         if claimed is None:
             continue
         record_task_event("updated", claimed, previous=task, note=f"parallel_claim:{agent_id}")
@@ -287,9 +292,10 @@ def report_agent_task(task_id: int, payload: AgentTaskReport, db: Session = Depe
     _require_active_agent_claim(previous, payload)
     next_status = payload.next_status or _default_status_after_agent_report(payload)
     description = append_agent_report(previous.description, payload)
-    task = store.update_task(task_id, TaskUpdate(description=description, status=next_status))
-    if task is None:
+    updated = store.update_task(task_id, TaskUpdate(description=description, status=next_status))
+    if updated is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = store.clear_agent_claim(task_id, agent_id=payload.agent_id, run_id=payload.run_id) or updated
     record_task_event(
         choose_update_action(task, previous),
         task,
@@ -364,6 +370,19 @@ def _is_codex_ready(task: TaskRead) -> bool:
     )
 
 
+def _is_claimable_by_parallel_runner(task: TaskRead, *, claim_started_without_agent: bool) -> bool:
+    if task.assignee != TaskAssignee.codex:
+        return False
+    if task.status == TaskStatus.backlog:
+        return True
+    return (
+        claim_started_without_agent
+        and task.status == TaskStatus.in_progress
+        and not task.agent_id
+        and not task.agent_run_id
+    )
+
+
 def _normalize_agent_id(value: str) -> str:
     normalized = value.strip()
     if len(normalized) <= 120:
@@ -372,7 +391,7 @@ def _normalize_agent_id(value: str) -> str:
 
 
 def _default_status_after_agent_report(report: AgentTaskReport) -> TaskStatus:
-    if report.status.value in {"blocked", "failed"}:
+    if report.status.value in {"blocked", "failed", "needs_input"}:
         return TaskStatus.blocked
     if report.status.value == "skipped":
         return TaskStatus.backlog

@@ -591,6 +591,11 @@ textarea {
   white-space: pre-wrap;
 }
 
+.report-question {
+  border: 1px solid rgb(178 75 0 / 24%);
+  background: #fffaf2;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;

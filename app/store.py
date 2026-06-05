@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from google.cloud import firestore
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -35,7 +35,17 @@ class TaskStore(Protocol):
     def create_task(self, payload: TaskCreate) -> TaskRead:
         ...
 
-    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+    def claim_task_for_agent(
+        self,
+        task_id: int,
+        *,
+        agent_id: str,
+        run_id: str,
+        claim_started_without_agent: bool = True,
+    ) -> TaskRead | None:
+        ...
+
+    def clear_agent_claim(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
         ...
 
     def update_task(self, task_id: int, payload: TaskUpdate) -> TaskRead | None:
@@ -94,14 +104,31 @@ class SqliteTaskStore:
         self.db.refresh(task)
         return task_to_read(task)
 
-    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+    def claim_task_for_agent(
+        self,
+        task_id: int,
+        *,
+        agent_id: str,
+        run_id: str,
+        claim_started_without_agent: bool = True,
+    ) -> TaskRead | None:
         now = utc_now()
+        status_condition = Task.status == TaskStatus.backlog
+        if claim_started_without_agent:
+            status_condition = or_(
+                status_condition,
+                and_(
+                    Task.status == TaskStatus.in_progress,
+                    Task.agent_id.is_(None),
+                    Task.agent_run_id.is_(None),
+                ),
+            )
         result = self.db.execute(
             update(Task)
             .where(
                 Task.id == task_id,
                 Task.assignee == TaskAssignee.codex,
-                Task.status == TaskStatus.backlog,
+                status_condition,
             )
             .values(
                 status=TaskStatus.in_progress,
@@ -109,6 +136,28 @@ class SqliteTaskStore:
                 agent_id=agent_id,
                 agent_run_id=run_id,
                 agent_claimed_at=now,
+                updated_at=now,
+            )
+        )
+        if result.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        return self.get_task(task_id)
+
+    def clear_agent_claim(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+        now = utc_now()
+        result = self.db.execute(
+            update(Task)
+            .where(
+                Task.id == task_id,
+                Task.agent_id == agent_id,
+                Task.agent_run_id == run_id,
+            )
+            .values(
+                agent_id=None,
+                agent_run_id=None,
+                agent_claimed_at=None,
                 updated_at=now,
             )
         )
@@ -216,7 +265,14 @@ class FirestoreTaskStore:
         self.collection.document(str(task_id)).set(data)
         return TaskRead.model_validate(data)
 
-    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+    def claim_task_for_agent(
+        self,
+        task_id: int,
+        *,
+        agent_id: str,
+        run_id: str,
+        claim_started_without_agent: bool = True,
+    ) -> TaskRead | None:
         ref = self.collection.document(str(task_id))
         now = utc_now()
 
@@ -226,7 +282,14 @@ class FirestoreTaskStore:
             if not snapshot.exists:
                 return False
             data = snapshot.to_dict() or {}
-            if data.get("assignee") != TaskAssignee.codex.value or data.get("status") != TaskStatus.backlog.value:
+            is_backlog = data.get("status") == TaskStatus.backlog.value
+            is_unclaimed_started = (
+                claim_started_without_agent
+                and data.get("status") == TaskStatus.in_progress.value
+                and not data.get("agent_id")
+                and not data.get("agent_run_id")
+            )
+            if data.get("assignee") != TaskAssignee.codex.value or not (is_backlog or is_unclaimed_started):
                 return False
             transaction.update(
                 ref,
@@ -244,6 +307,35 @@ class FirestoreTaskStore:
             return True
 
         if not claim(self.client.transaction()):
+            return None
+        return self.get_task(task_id)
+
+    def clear_agent_claim(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+        ref = self.collection.document(str(task_id))
+        now = utc_now()
+
+        @firestore.transactional
+        def clear(transaction: firestore.Transaction) -> bool:
+            snapshot = ref.get(transaction=transaction)
+            if not snapshot.exists:
+                return False
+            data = snapshot.to_dict() or {}
+            if data.get("agent_id") != agent_id or data.get("agent_run_id") != run_id:
+                return False
+            transaction.update(
+                ref,
+                encode_task_data(
+                    {
+                        "agent_id": None,
+                        "agent_run_id": None,
+                        "agent_claimed_at": None,
+                        "updated_at": now,
+                    }
+                ),
+            )
+            return True
+
+        if not clear(self.client.transaction()):
             return None
         return self.get_task(task_id)
 

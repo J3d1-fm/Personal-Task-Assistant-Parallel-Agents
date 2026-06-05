@@ -70,10 +70,18 @@ and describe what changed.
 
 For batch execution, an external Codex runner should call
 `POST /api/agent/parallel/claim` and start one worker per returned assignment.
+The claim endpoint normally picks both fresh `Backlog` Codex tasks and Codex
+tasks already moved to `In progress` when no active agent is attached yet. This
+matches the manual PM flow: if a card is assigned to Codex and moved to
+`In progress`, Codex owns the next action and the runner can bind itself to that
+card safely.
+
 Each worker should then call `POST /api/agent/tasks/{task_id}/report` with its
 assigned `agent_id` and `run_id`. The task card will show that worker's report
 under a collapsible `Codex work report` section with the summary, link, external
-status, and message/email text when provided.
+status, and message/email text when provided. After the report is accepted, the
+active agent identity is cleared; if you answer a blocked question and move the
+card back to `In progress`, the next runner pass can pick it up again.
 
 ## Priorities
 
@@ -190,6 +198,9 @@ Email/reporting convention:
 - If Codex prepared an unsent message, report status `draft` and include the
   message text.
 - If Codex created a file, PR, doc, or other artifact, include `artifact_url`.
+- If Codex needs a decision, approval, missing file, or clarification, report
+  status `needs_input` and include `question_text`; the task moves to `Blocked`
+  and the runner should post the same question in its automation chat.
 - If Codex could not finish, report status `blocked` or `failed` and explain the
   blocker in the summary.
 

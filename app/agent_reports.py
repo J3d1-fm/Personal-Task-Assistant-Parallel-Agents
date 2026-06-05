@@ -31,6 +31,9 @@ def build_chat_report(task: TaskRead, report: AgentTaskReport) -> str:
     if report.message_text:
         lines.append("Message text:")
         lines.append(report.message_text.strip())
+    if report.question_text:
+        lines.append("Question:")
+        lines.append(report.question_text.strip())
     return "\n".join(lines)
 
 
@@ -51,6 +54,9 @@ def format_report_block(report: AgentTaskReport) -> str:
     if report.message_text:
         lines.append("message_text:")
         lines.append(_indent_multiline(_clean_multiline(report.message_text)))
+    if report.question_text:
+        lines.append("question_text:")
+        lines.append(_indent_multiline(_clean_multiline(report.question_text)))
     lines.append(REPORT_END)
     return "\n".join(lines)
 

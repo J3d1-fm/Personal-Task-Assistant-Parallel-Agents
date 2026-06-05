@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models import TaskAssignee, TaskOrigin, TaskStatus
 
@@ -85,6 +85,7 @@ class AgentReportStatus(StrEnum):
     completed = "completed"
     sent = "sent"
     draft = "draft"
+    needs_input = "needs_input"
     blocked = "blocked"
     failed = "failed"
     skipped = "skipped"
@@ -94,6 +95,7 @@ class AgentParallelClaim(BaseModel):
     limit: int = Field(default=4, ge=1, le=20)
     agent_ids: list[str] = Field(default_factory=list, max_length=20)
     sort: str = Field(default="smart", pattern="^(smart|due|created|updated|priority|owner)$")
+    claim_started_without_agent: bool = True
 
 
 class AgentTaskAssignment(BaseModel):
@@ -114,6 +116,7 @@ class AgentTaskReport(BaseModel):
     artifact_url: str | None = None
     external_status: str | None = Field(default=None, max_length=120)
     message_text: str | None = None
+    question_text: str | None = Field(default=None, max_length=2000)
     chat_report: str | None = None
     next_status: TaskStatus | None = None
 
@@ -126,6 +129,12 @@ class AgentTaskReport(BaseModel):
         if scheme not in {"http", "https", "mailto", "slack"}:
             raise ValueError("artifact_url must use http, https, mailto, or slack")
         return value
+
+    @model_validator(mode="after")
+    def validate_needs_input_question(self) -> "AgentTaskReport":
+        if self.status == AgentReportStatus.needs_input and not (self.question_text or "").strip():
+            raise ValueError("question_text is required when status is needs_input")
+        return self
 
 
 class AgentTaskReportResult(BaseModel):

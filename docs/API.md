@@ -132,10 +132,11 @@ Response shape:
 ## Claim Parallel Agent Work
 
 Use this when an external runner is ready to start multiple Codex workers at the
-same time. The endpoint picks Codex-owned `backlog` tasks, sorts them, marks them
-`in_progress`, stores the active `agent_id` and `run_id`, and returns one task
-per agent id. The claim write is conditional, so concurrent runners should not
-receive the same task.
+same time. The endpoint picks Codex-owned `backlog` tasks and, by default,
+Codex-owned `in_progress` tasks that do not yet have an active `agent_id` and
+`agent_run_id`. It sorts them, marks them `in_progress`, stores the active
+`agent_id` and `agent_run_id`, and returns one task per agent id. The claim write
+is conditional, so concurrent runners should not receive the same task.
 
 ```bash
 curl -X POST "$TASK_TRACKER_URL/api/agent/parallel/claim" \
@@ -144,7 +145,8 @@ curl -X POST "$TASK_TRACKER_URL/api/agent/parallel/claim" \
   -d '{
     "limit": 3,
     "agent_ids": ["codex-a", "codex-b", "codex-c"],
-    "sort": "smart"
+    "sort": "smart",
+    "claim_started_without_agent": true
   }'
 ```
 
@@ -172,6 +174,11 @@ Response shape:
 If `agent_ids` is omitted, the server generates `codex-agent-1`,
 `codex-agent-2`, and so on up to `limit`.
 
+Set `claim_started_without_agent` to `false` when a runner should only claim
+fresh `backlog` tasks. Leave it as `true` for the normal Personal Codex flow,
+where assigning a task to Codex and moving it to `In progress` means Codex is
+responsible for picking it up.
+
 ## Report Agent Work
 
 Each worker should report back when its assigned task is complete, blocked, or
@@ -191,12 +198,13 @@ curl -X POST "$TASK_TRACKER_URL/api/agent/tasks/12/report" \
     "external_status": "draft",
     "artifact_url": "https://mail.google.com/mail/u/0/#drafts",
     "message_text": "Hi Alice,\\n\\nThanks for the update...",
+    "question_text": null,
     "chat_report": "Draft is ready in Gmail. I did not send it."
   }'
 ```
 
-Report status values are `completed`, `sent`, `draft`, `blocked`, `failed`, and
-`skipped`.
+Report status values are `completed`, `sent`, `draft`, `needs_input`,
+`blocked`, `failed`, and `skipped`.
 
 `artifact_url` must use `http`, `https`, `mailto`, or `slack`. Unsafe schemes are
 rejected server-side, and the UI also renders unknown schemes as plain text.
@@ -204,12 +212,18 @@ rejected server-side, and the UI also renders unknown schemes as plain text.
 Default task status after a report:
 
 - `completed`, `sent`, and `draft` move the task to `waiting_review`.
-- `blocked` and `failed` move it to `blocked`.
+- `needs_input`, `blocked`, and `failed` move it to `blocked`.
 - `skipped` moves it back to `backlog`.
 
 The response includes the updated task and `chat_report`. If the request did not
 provide `chat_report`, the server generates one from the task title, summary,
-artifact link, external status, and message text.
+artifact link, external status, message text, and question text.
+
+After a report is accepted, the active `agent_id`, `agent_run_id`, and
+`agent_claimed_at` fields are cleared. The structured report block remains in
+the task description as the historical record. If the user later answers a
+question and moves the task back to `In progress`, the next claim run can bind a
+fresh agent identity to the same card.
 
 ## Update Status or Assignment
 
