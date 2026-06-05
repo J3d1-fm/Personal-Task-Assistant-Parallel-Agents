@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -8,14 +9,20 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 
+from app.agent_reports import append_agent_report, build_chat_report
 from app.auth import current_user, is_allowed_email, require_api_key_or_user
 from app.config import get_settings
-from app.db import Base, engine, get_db
+from app.db import Base, engine, ensure_sqlite_schema, get_db
 from app.history import choose_update_action, record_task_event
 from app.models import TaskAssignee, TaskStatus
 from app.schemas import (
     AgentQueueRead,
     AgentQueueSummary,
+    AgentParallelClaim,
+    AgentParallelClaimResult,
+    AgentTaskAssignment,
+    AgentTaskReport,
+    AgentTaskReportResult,
     ContextIngest,
     ContextIngestResult,
     TaskCreate,
@@ -53,6 +60,7 @@ if settings.google_oauth_enabled:
 def startup() -> None:
     if not settings.use_firestore:
         Base.metadata.create_all(bind=engine)
+        ensure_sqlite_schema()
 
 
 @app.get("/healthz")
@@ -238,6 +246,59 @@ def create_agent_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Tas
     return task
 
 
+@app.post(
+    "/api/agent/parallel/claim",
+    response_model=AgentParallelClaimResult,
+    dependencies=[Depends(require_api_key_or_user)],
+)
+def claim_parallel_agent_tasks(payload: AgentParallelClaim, db: Session = Depends(get_db)) -> AgentParallelClaimResult:
+    store = get_task_store(db)
+    run_id = str(uuid4())
+    ready_tasks = [
+        task
+        for task in _sort_tasks_for_agent(store.list_tasks(include_done=True), sort=payload.sort)
+        if task.assignee == TaskAssignee.codex and task.status == TaskStatus.backlog
+    ]
+    agent_ids = [_normalize_agent_id(value) for value in payload.agent_ids if value.strip()]
+    if not agent_ids:
+        agent_ids = [f"codex-agent-{index + 1}" for index in range(payload.limit)]
+    selected_tasks = ready_tasks[: min(payload.limit, len(agent_ids))]
+    assignments: list[AgentTaskAssignment] = []
+    for index, task in enumerate(selected_tasks):
+        agent_id = agent_ids[index]
+        claimed = store.claim_task_for_agent(task.id, agent_id=agent_id, run_id=run_id)
+        if claimed is None:
+            continue
+        record_task_event("updated", claimed, previous=task, note=f"parallel_claim:{agent_id}")
+        assignments.append(AgentTaskAssignment(agent_id=agent_id, task=claimed))
+    return AgentParallelClaimResult(run_id=run_id, assignments=assignments)
+
+
+@app.post(
+    "/api/agent/tasks/{task_id}/report",
+    response_model=AgentTaskReportResult,
+    dependencies=[Depends(require_api_key_or_user)],
+)
+def report_agent_task(task_id: int, payload: AgentTaskReport, db: Session = Depends(get_db)) -> AgentTaskReportResult:
+    store = get_task_store(db)
+    previous = store.get_task(task_id)
+    if previous is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    _require_active_agent_claim(previous, payload)
+    next_status = payload.next_status or _default_status_after_agent_report(payload)
+    description = append_agent_report(previous.description, payload)
+    task = store.update_task(task_id, TaskUpdate(description=description, status=next_status))
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    record_task_event(
+        choose_update_action(task, previous),
+        task,
+        previous=previous,
+        note=f"agent_report:{payload.status.value}:{payload.agent_id}",
+    )
+    return AgentTaskReportResult(task=task, chat_report=build_chat_report(task, payload))
+
+
 @app.post("/api/ingest/context", response_model=ContextIngestResult, dependencies=[Depends(require_api_key_or_user)])
 @app.post("/api/agent/ingest/context", response_model=ContextIngestResult, dependencies=[Depends(require_api_key_or_user)])
 def ingest_context(payload: ContextIngest, db: Session = Depends(get_db)) -> ContextIngestResult:
@@ -301,6 +362,28 @@ def _is_codex_ready(task: TaskRead) -> bool:
         and task.assignee == TaskAssignee.codex
         and task.status in {TaskStatus.backlog, TaskStatus.in_progress}
     )
+
+
+def _normalize_agent_id(value: str) -> str:
+    normalized = value.strip()
+    if len(normalized) <= 120:
+        return normalized
+    return normalized[:120]
+
+
+def _default_status_after_agent_report(report: AgentTaskReport) -> TaskStatus:
+    if report.status.value in {"blocked", "failed"}:
+        return TaskStatus.blocked
+    if report.status.value == "skipped":
+        return TaskStatus.backlog
+    return TaskStatus.waiting_review
+
+
+def _require_active_agent_claim(task: TaskRead, report: AgentTaskReport) -> None:
+    if task.assignee != TaskAssignee.codex or task.status != TaskStatus.in_progress:
+        raise HTTPException(status_code=409, detail="Task is not actively claimed by Codex")
+    if task.agent_id != report.agent_id or task.agent_run_id != report.run_id:
+        raise HTTPException(status_code=409, detail="Agent report does not match the active task claim")
 
 
 def _needs_human_input(task: TaskRead) -> bool:

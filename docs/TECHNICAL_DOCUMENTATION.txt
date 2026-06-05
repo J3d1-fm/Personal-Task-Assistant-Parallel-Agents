@@ -1,40 +1,60 @@
 Personal Task Assistant Technical Documentation
 
-Version: 0.3.1
-Last updated: 2026-06-04
+Version: 0.4.0
+Last updated: 2026-06-05
 
 Overview
 
-Personal Task Assistant is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, agent queue reads, context ingestion, and reminders.
+Personal Task Assistant is a FastAPI application with a server-rendered HTML shell, static CSS/JS assets, and JSON API endpoints for task creation, task updates, agent queue reads, parallel agent task claims, agent work reports, context ingestion, and reminders.
 
-Version 0.3.1 keeps the 0.3.0 runtime behavior and adds a user-friendly local
-installation path: a macOS click installer, a cross-platform Python setup wizard,
-and AI-agent installation instructions for non-technical users.
+Version 0.4.0 adds a parallel Codex execution contract. External runners can
+claim several Codex-owned backlog tasks in one request, fan them out to separate
+workers, and have each worker append a structured report to its task card.
 
 Changed Files
 
 - app/config.py
   Sets Settings.app_name to Personal Task Assistant.
-  Sets Settings.app_version to 0.3.1.
+  Sets Settings.app_version to 0.4.0.
   Adds local_dev_auth_enabled for non-hosted runs with no Google OAuth configured.
   Adds local_dev_user_email for the browser session used by local development.
   Adds TASK_HISTORY_SHEET_ID and TASK_HISTORY_SHEET_TAB settings for optional spreadsheet history.
+
+- app/db.py
+  Adds a lightweight SQLite schema guard for the new claim columns so existing
+  local databases can be opened without a manual migration.
 
 - app/history.py
   Adds Google Sheets history export through Google Application Default Credentials and the Sheets REST API.
   Ensures the configured history tab exists, writes the header row, and appends one row per tracked event.
   Swallows Sheets write failures after logging a warning so task creation, updates, and deletes remain available.
 
+- app/models.py
+  Adds `agent_id`, `agent_run_id`, and `agent_claimed_at` to task records for
+  active Codex claim identity.
+
+- app/agent_reports.py
+  Adds formatting helpers for structured Codex work report blocks stored inside
+  task descriptions.
+  Builds chat-ready report text from the same agent report payload so external
+  runners can post concise results back to a conversation.
+
 - app/main.py
   Passes app_version into the index.html template.
   Allows local development sessions to open the tracker UI directly when Google OAuth is not configured and the app is not hosted.
   Records task events after create, patch, context ingest, and delete operations.
   Adds `GET /api/agent/queue`, `POST /api/agent/tasks`, and `POST /api/agent/ingest/context`.
+  Adds `POST /api/agent/parallel/claim` for multi-agent task assignment.
+  Adds `POST /api/agent/tasks/{task_id}/report` for worker result reporting.
+  Rejects reports unless the task is actively claimed by the same agent id and
+  run id.
   Computes agent queue summary fields for active, overdue, due-soon, codex-ready, human-input, review, blocked, and unassigned tasks.
 
 - app/store.py
   Adds get_task to both SQLite and Firestore stores so history rows can include previous status, owner, priority, and due date on updates and dismissals.
   Adds create-time DD defaults when `due_at` is missing. Default DD estimates are P1 +1 day, P2 +3 days, P3 +7 days, P4 +14 days, and P5 +30 days.
+  Adds conditional `claim_task_for_agent` implementations for SQLite and
+  Firestore so racing runners cannot claim the same backlog task.
 
 - app/templates/index.html
   Replaces the old sidebar-plus-board layout with a command-center layout:
@@ -55,6 +75,10 @@ Changed Files
   Adds Agent queue and Human input filters and metrics.
   Adds Set and DD date pills to every rendered task card.
   Migrates the old persisted `codex` filter to `codex_ready` and falls back unknown saved filters to `all`.
+  Parses delimited Codex work report blocks from task descriptions and renders
+  them as collapsible report sections without executing raw description HTML.
+  Renders unsupported artifact URL schemes as plain text even if older data
+  already contains them.
 
 - app/static/styles.css
   Reworks layout, typography, command-center controls, task cards, responsive behavior, and focus states.
@@ -63,6 +87,8 @@ Changed Files
   Adds destructive styling for Dismiss.
   In 0.2.5, moves Capture into a full-width row above the board, gives board columns a 300px minimum, and constrains cards, pills, buttons, and inputs to their own containers.
   Adds responsive layout for the sort/search controls and longer operational metric labels.
+  Adds compact styling for collapsible Codex work reports, report fields, links,
+  and message text.
 
 - .env.example
   Sets the default APP_NAME to Personal Task Assistant.
@@ -142,6 +168,35 @@ POST /api/agent/tasks
 
 Creates one task using the normal task schema and records the history note `agent_api`.
 
+POST /api/agent/parallel/claim
+
+Accepts `limit`, optional `agent_ids`, and `sort`. Selects Codex-owned backlog
+tasks, conditionally marks them `in_progress`, stores `agent_id`,
+`agent_run_id`, and `agent_claimed_at`, and returns one assignment per selected
+agent. This endpoint is the handoff point for a runner that will start multiple
+Codex workers in parallel. It does not execute the tasks inside the FastAPI
+process.
+
+POST /api/agent/tasks/{task_id}/report
+
+Accepts `agent_id`, `run_id`, `status`, `summary`, optional `artifact_url`,
+optional `external_status`, optional `message_text`, optional `chat_report`, and
+optional `next_status`.
+
+The endpoint rejects reports unless the task is currently `assignee=codex`,
+`status=in_progress`, and the payload matches the task's active `agent_id` and
+`agent_run_id`. It appends a delimited structured report block to `description`.
+`artifact_url` must use `http`, `https`, `mailto`, or `slack`.
+Default status handling is:
+
+- `completed`, `sent`, and `draft` -> `waiting_review`
+- `blocked` and `failed` -> `blocked`
+- `skipped` -> `backlog`
+
+The response returns the updated task plus `chat_report`. If `chat_report` is not
+provided, the server generates concise chat text from the task title, summary,
+artifact link, external status, and message text.
+
 POST /api/agent/ingest/context
 
 Alias for context ingestion so external agent clients have a consistent `/api/agent/*` surface.
@@ -207,28 +262,46 @@ The local session email is the first configured `ALLOWED_GOOGLE_EMAILS` value, o
 
 This fallback is intended only for local development so the UI can be inspected at `http://127.0.0.1:8000/` without creating Google OAuth credentials.
 
-No database migration is required for version 0.3.1. The live task schema is unchanged because DD uses the existing `due_at` field and date set uses the existing `created_at` field. The only production configuration added in 0.2.4 is optional Sheets history access.
+Version 0.4.0 adds three task fields: `agent_id`, `agent_run_id`, and
+`agent_claimed_at`. Firestore is schemaless. SQLite runs a small startup schema
+guard that adds these columns to existing local databases when missing. Agent
+work reports are appended to the existing `description` text field as delimited
+structured blocks.
 
 Rollback Notes
 
-To roll back version 0.3.1, revert these files to the previous version:
+To roll back version 0.4.0, revert these files to the previous version:
 
+- app/agent_reports.py
 - app/config.py
+- app/db.py
 - app/main.py
+- app/models.py
 - app/schemas.py
+- app/store.py
 - app/static/app.js
 - app/static/styles.css
-- app/store.py
-- app/templates/index.html
-- install.command
-- scripts/setup_wizard.py
-- docs/INSTALLATION.md
-- docs/AGENT_INSTALL.md
+- tests/test_agent_parallel.py
+- docs/API.md
+- docs/PM_GUIDE.md
+- docs/ARCHITECTURE.md
 
-The changelog and this technical documentation can remain as history or be reverted with the same version rollback. If rolling back to 0.3.0, the installer and agent install docs disappear but the agent queue/API behavior remains. If rolling back to 0.2.6, agent queue endpoints and automatic DD estimates disappear. If rolling back past 0.2.4, also unset `TASK_HISTORY_SHEET_ID` on Cloud Run.
+The changelog and this technical documentation can remain as history or be
+reverted with the same version rollback. If rolling back to 0.3.1, parallel
+claim/report endpoints and collapsible Codex work reports disappear, but the
+basic agent queue remains. Existing report blocks remain plain text in
+descriptions unless manually cleaned. If rolling back to 0.3.0, the installer
+and agent install docs disappear but the basic agent queue/API behavior remains.
+If rolling back to 0.2.6, agent queue endpoints and automatic DD estimates
+disappear. If rolling back past 0.2.4, also unset `TASK_HISTORY_SHEET_ID` on
+Cloud Run.
 
 Verification Performed
 
+- Version 0.4.0 Python compile check passed for app/db.py, app/models.py, app/config.py, app/agent_reports.py, app/schemas.py, app/store.py, app/main.py, and tests/test_agent_parallel.py with PYTHONPYCACHEPREFIX under /private/tmp.
+- Version 0.4.0 JavaScript syntax check passed for app/static/app.js.
+- Version 0.4.0 unittest smoke passed with temporary SQLite: Codex backlog tasks can be claimed by different agent ids through `/api/agent/parallel/claim`, concurrent claims do not duplicate one task, reports require matching `agent_id` and `run_id`, unsafe artifact URL schemes are rejected, and a draft email report appends a structured card report while returning chat-ready text.
+- Version 0.4.0 in-app Browser UI smoke passed against a temporary local SQLite instance that existed before the new claim columns: startup schema guard opened it cleanly, desktop and 390px mobile views rendered `details.work-report`, hid raw report markers, preserved email message text with blank lines, and had zero page-level horizontal overflow.
 - python3 -m py_compile app/config.py app/history.py app/store.py app/main.py with PYTHONPYCACHEPREFIX under /private/tmp because the local app/__pycache__ directory is not writable.
 - Local FastAPI smoke test with temporary SQLite: create task, patch task to done, delete task, with Sheets history disabled.
 - History row formatter smoke test: completed event includes current and previous status fields.

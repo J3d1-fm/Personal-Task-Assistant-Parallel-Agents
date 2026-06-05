@@ -102,13 +102,28 @@ Main endpoints:
 - `PATCH /api/tasks/{task_id}`
 - `DELETE /api/tasks/{task_id}`
 - `GET /api/agent/queue`
+- `POST /api/agent/parallel/claim`
 - `POST /api/agent/tasks`
+- `POST /api/agent/tasks/{task_id}/report`
 - `POST /api/agent/ingest/context`
 - `POST /api/ingest/context`
 - `GET /api/reminders/due`
 
 For day-to-day PM usage, see `docs/PM_GUIDE.md`. For integration examples, see
 `docs/API.md`.
+
+## Parallel Codex Runs
+
+External runners can process Codex-owned tasks in parallel:
+
+1. Call `POST /api/agent/parallel/claim` with a list of agent ids.
+2. Start one worker per returned assignment.
+3. Have each worker call `POST /api/agent/tasks/{task_id}/report` with its
+   `agent_id` and the returned `run_id` when it finishes.
+
+The report endpoint appends a compact work report to the task description, moves
+successful work to `waiting_review` by default, and returns chat-ready text that
+the runner can post back into Telegram, Slack, or another conversation.
 
 ## Integration Model
 

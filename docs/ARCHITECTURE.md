@@ -10,6 +10,9 @@
 - Firestore stores tasks in Google Cloud when `TASK_STORE=firestore`.
 - Codex or another AI agent extracts tasks from Slack, Telegram, Gmail, or other context and writes them through the API.
 - Agent clients can read a role-aware execution queue through `/api/agent/queue`.
+- Agent runners can claim multiple Codex-ready tasks through `/api/agent/parallel/claim` and fan them out to separate workers.
+- Agent workers report outcomes through `/api/agent/tasks/{task_id}/report`, which appends structured work-report blocks to task descriptions.
+- Claim identity is stored on the task as `agent_id`, `agent_run_id`, and `agent_claimed_at`; reports must match that active claim.
 - Reminder polling calls `/api/reminders/due`, sends notifications, then marks each reminder as sent.
 
 ## Google Cloud Target
@@ -30,6 +33,11 @@ Task fields intentionally stay small:
 - `origin`: `manual`, `slack`, `telegram`, `email`, `codex`, `other`
 - `priority`, `due_at`, `reminder_at`
 - `source_name`, `source_url`, `source_context`
+- `agent_id`, `agent_run_id`, `agent_claimed_at` for the latest active Codex claim
 
 `created_at` is the date the task was set. `due_at` is the DD. If an API client
 omits `due_at`, the store layer estimates DD from priority before saving.
+
+Codex work reports are stored inside `description` as delimited structured text
+blocks. This keeps the live schema stable across SQLite and Firestore while
+letting the UI render each report as a safe collapsible section in the task card.

@@ -1,5 +1,15 @@
 Personal Task Assistant Changelog
 
+Version 0.4.0 - 2026-06-05
+
+- Added `POST /api/agent/parallel/claim` so an external Codex runner can claim multiple ready Codex tasks in one run and assign each task to a different agent id.
+- Added `POST /api/agent/tasks/{task_id}/report` so each agent can append a compact structured work report to the task description and receive the matching chat-ready report text.
+- Persisted active claim identity with `agent_id`, `agent_run_id`, and `agent_claimed_at`, and made task claims conditional so concurrent runners do not receive the same task.
+- Report submission now requires a matching active Codex claim and rejects unsafe artifact URL schemes.
+- Added structured support for completed, sent, draft, blocked, failed, and skipped agent outcomes, including artifact links, external status, and email/message text.
+- Added collapsible Codex work reports inside task cards while keeping raw task description text escaped.
+- Bumped the app and static asset version from 0.3.1 to 0.4.0.
+
 Version 0.3.1 - 2026-06-04
 
 - Clarified that Jira, Asana, YouTrack, Slack, Telegram, email, and similar integrations are supported through user-built adapters that call the JSON API; source-specific adapter implementation and credentials remain the user's responsibility.

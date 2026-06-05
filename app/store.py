@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from google.cloud import firestore
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Task, TaskStatus, utc_now
+from app.models import Task, TaskAssignee, TaskStatus, utc_now
 from app.schemas import TaskCreate, TaskRead, TaskUpdate
 
 
@@ -33,6 +33,9 @@ class TaskStore(Protocol):
         ...
 
     def create_task(self, payload: TaskCreate) -> TaskRead:
+        ...
+
+    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
         ...
 
     def update_task(self, task_id: int, payload: TaskUpdate) -> TaskRead | None:
@@ -90,6 +93,30 @@ class SqliteTaskStore:
         self.db.commit()
         self.db.refresh(task)
         return task_to_read(task)
+
+    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+        now = utc_now()
+        result = self.db.execute(
+            update(Task)
+            .where(
+                Task.id == task_id,
+                Task.assignee == TaskAssignee.codex,
+                Task.status == TaskStatus.backlog,
+            )
+            .values(
+                status=TaskStatus.in_progress,
+                assignee=TaskAssignee.codex,
+                agent_id=agent_id,
+                agent_run_id=run_id,
+                agent_claimed_at=now,
+                updated_at=now,
+            )
+        )
+        if result.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        return self.get_task(task_id)
 
     def update_task(self, task_id: int, payload: TaskUpdate) -> TaskRead | None:
         task = self.db.get(Task, task_id)
@@ -188,6 +215,37 @@ class FirestoreTaskStore:
         data = encode_task_data(data)
         self.collection.document(str(task_id)).set(data)
         return TaskRead.model_validate(data)
+
+    def claim_task_for_agent(self, task_id: int, *, agent_id: str, run_id: str) -> TaskRead | None:
+        ref = self.collection.document(str(task_id))
+        now = utc_now()
+
+        @firestore.transactional
+        def claim(transaction: firestore.Transaction) -> bool:
+            snapshot = ref.get(transaction=transaction)
+            if not snapshot.exists:
+                return False
+            data = snapshot.to_dict() or {}
+            if data.get("assignee") != TaskAssignee.codex.value or data.get("status") != TaskStatus.backlog.value:
+                return False
+            transaction.update(
+                ref,
+                encode_task_data(
+                    {
+                        "status": TaskStatus.in_progress,
+                        "assignee": TaskAssignee.codex,
+                        "agent_id": agent_id,
+                        "agent_run_id": run_id,
+                        "agent_claimed_at": now,
+                        "updated_at": now,
+                    }
+                ),
+            )
+            return True
+
+        if not claim(self.client.transaction()):
+            return None
+        return self.get_task(task_id)
 
     def update_task(self, task_id: int, payload: TaskUpdate) -> TaskRead | None:
         ref = self.collection.document(str(task_id))

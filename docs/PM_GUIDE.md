@@ -68,6 +68,13 @@ When the agent takes a task, it should mark the task as `Codex` and move it to
 `In progress`. When the work is complete, Codex should move it to `Waiting review`
 and describe what changed.
 
+For batch execution, an external Codex runner should call
+`POST /api/agent/parallel/claim` and start one worker per returned assignment.
+Each worker should then call `POST /api/agent/tasks/{task_id}/report` with its
+assigned `agent_id` and `run_id`. The task card will show that worker's report
+under a collapsible `Codex work report` section with the summary, link, external
+status, and message/email text when provided.
+
 ## Priorities
 
 Use priority to decide what should be seen first, not to express emotional weight.
@@ -176,6 +183,15 @@ Poor Codex tasks:
 
 For outbound emails or Slack messages, Codex should show the draft first and send
 only after explicit approval.
+
+Email/reporting convention:
+
+- If Codex sent something after approval, report status `sent`.
+- If Codex prepared an unsent message, report status `draft` and include the
+  message text.
+- If Codex created a file, PR, doc, or other artifact, include `artifact_url`.
+- If Codex could not finish, report status `blocked` or `failed` and explain the
+  blocker in the summary.
 
 ## Review Process
 

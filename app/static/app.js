@@ -18,6 +18,17 @@ const filterLabels = {
 const legacyFilters = {
   codex: "codex_ready",
 };
+const workReportStart = "<!-- codex-work-report:start -->";
+const workReportEnd = "<!-- codex-work-report:end -->";
+const workReportKeys = new Set([
+  "reported_at",
+  "agent_id",
+  "status",
+  "external_status",
+  "artifact_url",
+  "summary",
+  "message_text",
+]);
 
 const form = document.querySelector("#taskForm");
 const searchInput = document.querySelector("#taskSearch");
@@ -380,6 +391,84 @@ function sourceMarkup(task) {
   return name ? `<span class="pill" ${tooltipAttr("Where this task came from.")}>${name}</span>` : "";
 }
 
+function parseTaskDescription(description) {
+  if (!description) return { body: "", reports: [] };
+  const reports = [];
+  let body = description;
+  const pattern = new RegExp(`${escapeRegExp(workReportStart)}([\\s\\S]*?)${escapeRegExp(workReportEnd)}`, "g");
+  body = body.replace(pattern, (_, reportBody) => {
+    const report = parseWorkReport(reportBody);
+    if (report) reports.push(report);
+    return "";
+  });
+  return { body: body.trim(), reports };
+}
+
+function parseWorkReport(value) {
+  const report = {};
+  let currentKey = null;
+  for (const rawLine of value.trim().split(/\r?\n/)) {
+    const match = rawLine.match(/^([a-z_]+):(?:\s*(.*))?$/);
+    if (match && workReportKeys.has(match[1])) {
+      currentKey = match[1];
+      report[currentKey] = match[2] || "";
+      continue;
+    }
+    if (currentKey && rawLine.startsWith("  ")) {
+      report[currentKey] = `${report[currentKey] ? `${report[currentKey]}\n` : ""}${rawLine.slice(2)}`;
+    }
+  }
+  return report.summary ? report : null;
+}
+
+function taskDescriptionMarkup(description) {
+  const { body, reports } = parseTaskDescription(description);
+  const pieces = [];
+  if (body) pieces.push(`<p class="task-description">${escapeHtml(body)}</p>`);
+  reports.forEach((report) => pieces.push(workReportMarkup(report)));
+  return pieces.join("");
+}
+
+function workReportMarkup(report) {
+  const reportedAt = report.reported_at ? formatDateTime(report.reported_at) : "";
+  const status = report.status ? report.status.replaceAll("_", " ") : "reported";
+  const rows = [
+    report.agent_id ? reportRow("Agent", report.agent_id) : "",
+    reportedAt ? reportRow("When", reportedAt) : "",
+    report.external_status ? reportRow("Status", report.external_status) : "",
+    report.artifact_url ? reportLinkRow("Link", report.artifact_url) : "",
+  ].join("");
+  return `
+    <details class="work-report">
+      <summary>
+        <span>Codex work report</span>
+        <strong>${escapeHtml(status)}</strong>
+      </summary>
+      <div class="report-summary">${escapeHtml(report.summary)}</div>
+      ${rows ? `<dl class="report-grid">${rows}</dl>` : ""}
+      ${report.message_text ? `<pre class="report-message">${escapeHtml(report.message_text)}</pre>` : ""}
+    </details>
+  `;
+}
+
+function reportRow(label, value) {
+  return `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`;
+}
+
+function reportLinkRow(label, value) {
+  if (!isSafeArtifactUrl(value)) return reportRow(label, value);
+  return `<dt>${escapeHtml(label)}</dt><dd><a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">${escapeHtml(value)}</a></dd>`;
+}
+
+function isSafeArtifactUrl(value) {
+  try {
+    const url = new URL(value, window.location.origin);
+    return ["http:", "https:", "mailto:", "slack:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
 function taskNode(task) {
   const node = document.createElement("article");
   node.className = priorityClass(task);
@@ -392,7 +481,7 @@ function taskNode(task) {
       <span class="task-id">#${task.id}</span>
     </div>
     <h3>${escapeHtml(task.title)}</h3>
-    ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
+    ${taskDescriptionMarkup(task.description)}
     <div class="meta">
       <span class="pill priority-pill" ${tooltipAttr(priorityTooltip(task))}>${escapeHtml(priorityLabel(task))}</span>
       <span class="pill assignee-${escapeHtml(task.assignee)}" ${tooltipAttr(assigneeTooltip(task.assignee))}>${escapeHtml(assigneeLabel(task.assignee))}</span>
@@ -441,6 +530,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function matchesFilter(task) {

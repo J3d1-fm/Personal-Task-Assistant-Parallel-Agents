@@ -509,7 +509,7 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-.task p {
+.task-description {
   display: -webkit-box;
   overflow: hidden;
   color: #4d586c;
@@ -517,6 +517,78 @@ textarea {
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+.work-report {
+  border: 1px solid rgb(33 110 99 / 24%);
+  border-radius: 7px;
+  background: #f5fbf9;
+  color: var(--text);
+}
+
+.work-report summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 7px 9px;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.work-report summary strong {
+  flex: 0 0 auto;
+  border: 1px solid rgb(33 110 99 / 30%);
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: white;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.report-summary {
+  padding: 0 9px 8px;
+  color: #344154;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: minmax(60px, auto) minmax(0, 1fr);
+  gap: 5px 8px;
+  margin: 0;
+  padding: 0 9px 9px;
+  font-size: 12px;
+}
+
+.report-grid dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.report-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.report-grid a {
+  color: var(--accent);
+}
+
+.report-message {
+  max-height: 180px;
+  margin: 0 9px 9px;
+  border-radius: 6px;
+  background: white;
+  color: #344154;
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 
 .meta {
