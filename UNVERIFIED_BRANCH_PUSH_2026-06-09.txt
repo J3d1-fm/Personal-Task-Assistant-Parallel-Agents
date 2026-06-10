@@ -1,0 +1,32 @@
+Unverified branch push report - 2026-06-09
+
+Repository:
+Personal Task Tracker Codex
+
+Branch:
+codex/computer-repair-snapshot-20260609
+
+Reason:
+The local machine is going to repair, so local instruction work is being
+preserved on GitHub as a branch/PR instead of being pushed directly to main.
+
+Included local work:
+- AGENTS.md local project instructions.
+
+Validation performed:
+- git status inventory.
+
+Validation not performed:
+- Product tests were not run because this snapshot only preserves project
+  instructions and does not change product code.
+- Independent review and validation review were not run in this turn.
+
+Release status:
+- Not merged to main.
+- No production deploy.
+- No version bump.
+- No tag.
+
+Notes:
+- .codex-tmp/ remains local untracked temporary material and is intentionally
+  not committed or pushed.
